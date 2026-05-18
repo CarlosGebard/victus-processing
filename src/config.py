@@ -10,25 +10,46 @@ import yaml
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
-DATA_SOURCES_DIR = DATA_DIR / "sources"
-DATA_STAGES_DIR = DATA_DIR / "stages"
+DATA_CANDIDATES_DIR = DATA_DIR / "candidates"
+DATA_CANDIDATES_ACTIVE_DIR = DATA_CANDIDATES_DIR / "active"
+DATA_CANDIDATES_DISCARDED_DIR = DATA_CANDIDATES_DIR / "discarded"
+DATA_PAPERS_DIR = DATA_DIR / "papers"
+DATA_INPUTS_DIR = DATA_DIR / "inputs"
+DATA_INPUT_SEEDS_DIR = DATA_INPUTS_DIR / "seeds"
+DATA_INPUT_RULES_DIR = DATA_INPUTS_DIR / "rules"
+DATA_INPUT_IMPORTS_DIR = DATA_INPUTS_DIR / "imports"
+DATA_REGISTRY_DIR = DATA_DIR / "registry"
 DATA_RUNTIME_DIR = DATA_DIR / "runtime"
+DATA_RUNTIME_PDF_RETRIEVAL_DIR = DATA_RUNTIME_DIR / "pdf_retrieval"
+DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "pdfs"
+DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
+DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "claims"
+DATA_RUNTIME_TMP_DIR = DATA_RUNTIME_DIR / "tmp"
+DATA_RUNTIME_LOGS_DIR = DATA_RUNTIME_DIR / "logs"
+DATA_RUNTIME_QUEUES_DIR = DATA_RUNTIME_DIR / "queues"
+DATA_REPORTS_DIR = DATA_DIR / "reports"
+DATA_REPORTS_AUDITS_DIR = DATA_REPORTS_DIR / "audits"
+DATA_REPORTS_EXPORTS_DIR = DATA_REPORTS_DIR / "exports"
 DATA_ARCHIVE_DIR = DATA_DIR / "archive"
-CSV_DIR = DATA_DIR / "csv"
-ANALYTICS_DIR = DATA_DIR / "analytics"
+DATA_ARCHIVE_LEGACY_DIR = DATA_ARCHIVE_DIR / "legacy"
+DATA_ARCHIVE_EXPERIMENTS_DIR = DATA_ARCHIVE_DIR / "experiments"
+DATA_SOURCES_DIR = DATA_INPUTS_DIR
+DATA_STAGES_DIR = DATA_RUNTIME_DIR
+CSV_DIR = DATA_INPUT_IMPORTS_DIR
+ANALYTICS_DIR = DATA_REPORTS_DIR
 CORPUS_INFO_DIR = DATA_DIR / "corpus_info"
 METADATA_RULES_DIR = CORPUS_INFO_DIR / "metadata_rules"
 PDF_RETRIEVAL_DIR = CORPUS_INFO_DIR / "pdf_retrieval"
 LEGACY_PDF_RETIREVAL_DIR = CORPUS_INFO_DIR / "pdf_retireval"
-PRE_INGESTION_DIR = CORPUS_INFO_DIR / "pre_ingestion_topics"
-PRE_INGESTION_EDITABLE_DIR = PRE_INGESTION_DIR
-PRE_INGESTION_PAPERS_CSV = PRE_INGESTION_DIR / "papers.csv"
-PRE_INGESTION_CANDIDATE_TERMS_CSV = PRE_INGESTION_DIR / "candidate_terms_top500.csv"
+PRE_INGESTION_DIR = DATA_INPUTS_DIR
+PRE_INGESTION_EDITABLE_DIR = DATA_INPUT_RULES_DIR
+PRE_INGESTION_PAPERS_CSV = DATA_INPUT_IMPORTS_DIR / "papers.csv"
+PRE_INGESTION_CANDIDATE_TERMS_CSV = DATA_INPUT_IMPORTS_DIR / "candidate_terms_top500.csv"
 PRE_INGESTION_GENERATED_DRAFT_TOPICS_YAML = PRE_INGESTION_EDITABLE_DIR / "draft_topics.generated.yaml"
 PRE_INGESTION_TOPICS_YAML = PRE_INGESTION_EDITABLE_DIR / "topics.yaml"
 PRE_INGESTION_DRAFT_TOPICS_YAML = PRE_INGESTION_TOPICS_YAML
 PRE_INGESTION_BOOTSTRAP_RULES_YAML = PRE_INGESTION_EDITABLE_DIR / "bootstrap_rules.yaml"
-PRE_INGESTION_AUDIT_DIR = PRE_INGESTION_DIR / "audit"
+PRE_INGESTION_AUDIT_DIR = DATA_REPORTS_AUDITS_DIR / "pre_ingestion"
 CONFIG_FILE = ROOT_DIR / "config.yaml"
 ENV_FILE = ROOT_DIR / ".env"
 
@@ -83,32 +104,32 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
 
     metadata_dir = resolve_project_path(
         storage_cfg.get("papers_dir"),
-        DATA_DIR / "stages" / "01_metadata",
+        DATA_CANDIDATES_ACTIVE_DIR,
     )
     discarded_dir = resolve_project_path(
         storage_cfg.get("discarded_dir"),
-        METADATA_RULES_DIR / "discarded_papers",
+        DATA_CANDIDATES_DISCARDED_DIR,
     )
     registry_dir = resolve_project_path(
         storage_cfg.get("registry_dir"),
-        METADATA_RULES_DIR / "registry",
+        DATA_REGISTRY_DIR,
     )
     raw_pdf_dir = resolve_project_path(
         storage_cfg.get("raw_pdf_dir"),
-        PDF_RETRIEVAL_DIR / "downloaded_pdfs",
+        DATA_RUNTIME_PDF_RETRIEVAL_DIR / "raw",
     )
     unmatched_pdf_dir = resolve_project_path(
         storage_cfg.get("unmatched_pdf_dir"),
-        PDF_RETRIEVAL_DIR / "unmatched_pdf",
+        DATA_RUNTIME_PDF_RETRIEVAL_DIR / "unmatched",
     )
 
     docling_input_dir = resolve_project_path(
         docling_cfg.get("input_dir"),
-        DATA_DIR / "stages" / "02_normalized_pdfs",
+        DATA_RUNTIME_PDFS_DIR / "normalized",
     )
     docling_heuristics_dir = resolve_project_path(
         docling_cfg.get("output_dir"),
-        DATA_DIR / "stages" / "03_docling_heuristics",
+        DATA_RUNTIME_DOCLING_DIR,
     )
     claims_input_dir = resolve_project_path(
         llm_claims_cfg.get("input_dir"),
@@ -116,7 +137,7 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
     )
     claims_output_dir = resolve_project_path(
         llm_claims_cfg.get("output_dir"),
-        DATA_DIR / "stages" / "04_claims",
+        DATA_RUNTIME_CLAIMS_DIR,
     )
 
     return {
@@ -138,7 +159,7 @@ def get_testing_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
 
     testing_root_dir = resolve_project_path(
         testing_cfg.get("root_dir"),
-        DATA_ARCHIVE_DIR / "testing_1",
+        DATA_ARCHIVE_EXPERIMENTS_DIR / "testing_1",
     )
     testing_docling_dir = resolve_project_path(
         testing_cfg.get("docling_output_dir"),
@@ -161,7 +182,7 @@ def get_exploration_seed_doi_file(config: dict[str, Any] | None = None) -> Path:
     exploration_cfg = cfg.get("exploration") or {}
     return resolve_project_path(
         exploration_cfg.get("seed_doi_file"),
-        METADATA_RULES_DIR / "seed_dois.txt",
+        DATA_INPUT_SEEDS_DIR / "seed_dois.txt",
     )
 
 
@@ -170,7 +191,7 @@ def get_exploration_completed_seed_doi_file(config: dict[str, Any] | None = None
     exploration_cfg = cfg.get("exploration") or {}
     return resolve_project_path(
         exploration_cfg.get("completed_seed_doi_file"),
-        METADATA_RULES_DIR / "explored_seed_dois.txt",
+        DATA_INPUT_SEEDS_DIR / "explored_seed_dois.txt",
     )
 
 
@@ -185,8 +206,29 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_DIR,
         DATA_SOURCES_DIR,
         DATA_STAGES_DIR,
+        DATA_CANDIDATES_DIR,
+        DATA_CANDIDATES_ACTIVE_DIR,
+        DATA_CANDIDATES_DISCARDED_DIR,
+        DATA_PAPERS_DIR,
+        DATA_INPUTS_DIR,
+        DATA_INPUT_SEEDS_DIR,
+        DATA_INPUT_RULES_DIR,
+        DATA_INPUT_IMPORTS_DIR,
+        DATA_REGISTRY_DIR,
         DATA_RUNTIME_DIR,
+        DATA_RUNTIME_PDF_RETRIEVAL_DIR,
+        DATA_RUNTIME_PDFS_DIR,
+        DATA_RUNTIME_DOCLING_DIR,
+        DATA_RUNTIME_CLAIMS_DIR,
+        DATA_RUNTIME_TMP_DIR,
+        DATA_RUNTIME_LOGS_DIR,
+        DATA_RUNTIME_QUEUES_DIR,
+        DATA_REPORTS_DIR,
+        DATA_REPORTS_AUDITS_DIR,
+        DATA_REPORTS_EXPORTS_DIR,
         DATA_ARCHIVE_DIR,
+        DATA_ARCHIVE_LEGACY_DIR,
+        DATA_ARCHIVE_EXPERIMENTS_DIR,
         CSV_DIR,
         ANALYTICS_DIR,
         CORPUS_INFO_DIR,
@@ -279,20 +321,20 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
 
 @lru_cache(maxsize=1)
 def resolve_docling_v2_pipeline_runner() -> Callable[..., dict[str, Any]]:
-    from src.docling_heuristics_pipeline.converter import convert_pdf_for_pipeline
+    from src.docling.converter import convert_pdf_for_pipeline
 
     return convert_pdf_for_pipeline
 
 
 @lru_cache(maxsize=1)
 def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[int, int]]:
-    from src.tools.pdf_normalization import sync_raw_pdfs_into_input
+    from src.pdf.normalization import sync_raw_pdfs_into_input
 
     return sync_raw_pdfs_into_input
 
 
 @lru_cache(maxsize=1)
 def resolve_claims_flow() -> Callable[..., tuple[int, int, int]]:
-    from src.tools.claims_extraction import run_claim_extraction_flow
+    from src.claims.extraction import run_claim_extraction_flow
 
     return run_claim_extraction_flow

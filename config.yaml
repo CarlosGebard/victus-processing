@@ -1,13 +1,14 @@
 seed_paper: "DOI:10.1056/NEJM199704173361601"
 
 exploration:
+  mode: "broad-nutrition"
   limit: 50
   min_citations: 100
   min_year: 2000
   buffer_size: 50
   max_abstract_words: 300
-  seed_doi_file: "data/corpus_info/metadata_rules/seed_dois.txt"
-  completed_seed_doi_file: "data/corpus_info/metadata_rules/explored_seed_dois.txt"
+  seed_doi_file: "data/inputs/seeds/seed_dois.txt"
+  completed_seed_doi_file: "data/inputs/seeds/explored_seed_dois.txt"
 
 metadata_selection:
   model: "gpt-5-mini"
@@ -23,29 +24,29 @@ rate_limit:
   retries: 5
 
 storage:
-  papers_dir: "data/stages/01_metadata"
-  discarded_dir: "data/corpus_info/metadata_rules/discarded_papers"
-  registry_dir: "data/corpus_info/metadata_rules/registry"
-  raw_pdf_dir: "data/corpus_info/pdf_retrieval/downloaded_pdfs"
-  unmatched_pdf_dir: "data/corpus_info/pdf_retrieval/unmatched_pdf"
+  papers_dir: "data/candidates/active"
+  discarded_dir: "data/candidates/discarded"
+  registry_dir: "data/registry"
+  raw_pdf_dir: "data/runtime/pdf_retrieval/raw"
+  unmatched_pdf_dir: "data/runtime/pdf_retrieval/unmatched"
 
 docling_ingestion:
-  input_dir: "data/stages/02_normalized_pdfs"
-  output_dir: "data/stages/03_docling_heuristics"
+  input_dir: "data/runtime/pdfs/normalized"
+  output_dir: "data/runtime/docling"
 
 heuristics:
-  full_dir: "data/stages/03_docling_heuristics"
-  final_dir: "data/stages/03_docling_heuristics"
+  full_dir: "data/runtime/docling"
+  final_dir: "data/runtime/docling"
 
 llm_to_claim:
-  input_dir: "data/stages/03_docling_heuristics"
-  output_dir: "data/stages/04_claims"
+  input_dir: "data/runtime/docling"
+  output_dir: "data/runtime/claims"
   model: "gpt-5-mini"
   max_claims: 20
   auto_approve_max_tokens: 7000
   temperature: 0.0
 
 testing:
-  root_dir: "data/archive/testing_1"
-  docling_output_dir: "data/archive/testing_1/docling"
-  claims_output_dir: "data/archive/testing_1/claims"
+  root_dir: "data/archive/experiments/testing_1"
+  docling_output_dir: "data/archive/experiments/testing_1/docling"
+  claims_output_dir: "data/archive/experiments/testing_1/claims"

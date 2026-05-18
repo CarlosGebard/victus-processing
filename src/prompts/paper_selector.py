@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.tools.paper_selector import PaperCandidate
+    from src.metadata.paper_selector import PaperCandidate
 
 
 PAPER_SELECTOR_SYSTEM_PROMPT = """You are a paper-selection agent for a scientific RAG focused on nutrition.
@@ -27,8 +27,7 @@ Drop papers that are clearly outside scope, such as:
 - papers where title and preview strongly suggest the topic is not about nutrition or diet
 
 Rules:
-- Use only the title and abstract preview provided
-- The abstract preview may be missing or truncated
+- Use only the title provided
 - Be moderately recall-oriented but still selective
 - If relevance is unclear, return "uncertain"
 
@@ -39,7 +38,7 @@ Output (valid JSON only):
 }"""
 
 
-PAPER_SELECTOR_GAP_SYSTEM_PROMPT = """You are a paper-selection agent for a scientific RAG focused on undercovered nutrition gaps.
+PAPER_SELECTOR_GAP_SYSTEM_PROMPT = """You are a paper-selection agent focused on dataset gaps in nutrition coverage.
 
 Task:
 Decide whether each candidate paper should be kept or dropped for downstream retrieval aimed at expanding coverage in missing or weakly covered nutrition areas.
@@ -62,8 +61,7 @@ Drop papers that are clearly outside scope, such as:
 - general disease papers with no meaningful focus on diet, nutrients, feeding, biomarkers, or nutrition management
 
 Rules:
-- Use only the title and abstract preview provided
-- The abstract preview may be missing or truncated
+- Use only the title provided
 - Be recall-oriented for the listed gap themes, but do not keep generic nutrition papers unless one of those themes is clearly present
 - If relevance is unclear, return "uncertain"
 
@@ -77,7 +75,7 @@ Output (valid JSON only):
 def get_paper_selector_system_prompt(selection_profile: str = "broad-nutrition") -> str:
     if selection_profile in {"broad-nutrition", "nutrition-rag"}:
         return PAPER_SELECTOR_SYSTEM_PROMPT
-    if selection_profile in {"undercovered-topics", "gap-rag"}:
+    if selection_profile == "dataset-gaps":
         return PAPER_SELECTOR_GAP_SYSTEM_PROMPT
     raise ValueError(f"Unknown paper selector profile: {selection_profile}")
 

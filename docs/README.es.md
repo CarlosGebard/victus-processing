@@ -24,7 +24,7 @@ Flujo principal:
 ```bash
 victus-processing metadata explore --mode broad-nutrition
 victus-processing pdfs normalize
-victus-processing pipeline run
+victus-processing docling run
 victus-processing claims extract --skip-existing
 ```
 
@@ -48,5 +48,5 @@ La suite completa aún referencia `analytics/`, que está saliendo del repo.
 - [Seguridad](security.md)
 - [Tests](tests.md)
 - [Roadmap](roadmap.md)
-- [CLI local](../ops/scripts/local/README.md)
+- [CLI local](local-cli.md)
 - [CLI bridge](../ops/scripts/bridge/README.md)

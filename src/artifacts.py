@@ -183,13 +183,52 @@ def metadata_path_for_base_name(base_name: str, metadata_dir: Path | None = None
     return None
 
 
+def paper_id_for_base_name(base_name: str) -> str | None:
+    links_path = ctx.DATA_REGISTRY_DIR / "links.jsonl"
+    if not links_path.exists():
+        return None
+    for line in links_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("document_id") == base_name:
+            return str(row.get("paper_id") or "") or None
+    return None
+
+
+def mirror_artifact_paths_for_base_name(base_name: str) -> dict[str, Path] | None:
+    paper_id = paper_id_for_base_name(base_name)
+    if not paper_id:
+        return None
+    paper_dir = ctx.DATA_PAPERS_DIR / paper_id
+    return {
+        "metadata": paper_dir / "metadata" / "source.json",
+        "pdf": paper_dir / "raw" / "source.pdf",
+        "docling_heuristics_dir": paper_dir / "docling",
+        "docling_json": paper_dir / "docling" / "full.json",
+        "filtered_json": paper_dir / "docling" / "filtered.json",
+        "final_json": paper_dir / "docling" / "final.json",
+        "claims": paper_dir / "claims" / "claims.json",
+    }
+
+
 def metadata_exists_for_base_name(base_name: str) -> bool:
+    mirror_paths = mirror_artifact_paths_for_base_name(base_name)
+    if mirror_paths and mirror_paths["metadata"].exists():
+        return True
     return metadata_path_for_base_name(base_name) is not None
 
 
 def artifact_stage_status(paths: dict[str, Path]) -> dict[str, bool]:
+    base_name = paths["metadata"].stem.replace(".metadata", "")
+    mirror_paths = mirror_artifact_paths_for_base_name(base_name)
+    if mirror_paths:
+        paths = mirror_paths
     return {
-        "metadata": metadata_exists_for_base_name(paths["metadata"].stem.replace(".metadata", "")),
+        "metadata": metadata_exists_for_base_name(base_name),
         "pdf": paths["pdf"].exists(),
         "docling": paths["docling_json"].exists(),
         "heuristics": paths["filtered_json"].exists() and paths["final_json"].exists(),

@@ -1,4 +1,4 @@
-from .claims_v2_ import CLAIMS_PROMPT_TEMPLATE, build_claims_prompt
+from .claims import CLAIMS_PROMPT_TEMPLATE, build_claims_prompt
 from .paper_selector import (
     PAPER_SELECTOR_GAP_SYSTEM_PROMPT,
     PAPER_SELECTOR_SYSTEM_PROMPT,

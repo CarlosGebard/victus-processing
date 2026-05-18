@@ -12,36 +12,45 @@ This repo does not own analytics, deployment infrastructure, Qdrant, RAG indexin
 
 ## Components
 
-- `ops/scripts/local/`: local CLI entrypoint and command routing.
+- `src/cli.py`: local CLI entrypoint, parser, command routing, and handlers.
 - `ops/scripts/bridge/`: Victus bridge package for registry, storage, and event integration.
-- `ops/scripts/*.py`: helper scripts called by the local CLI.
+- `ops/scripts/*.py`: manager scripts that do not belong to a narrower ops domain yet.
 - `src/config.py`: config loading, `.env` loading, runtime paths.
-- `src/stages/`: pipeline stage orchestration.
-- `src/tools/`: supporting tools for bibliography, metadata, PDFs, and claims.
-- `src/docling_heuristics_pipeline/`: Docling and heuristic document processing.
+- `src/metadata/stage.py, src/pdf/stage.py, src/docling/stage.py, src/claims/stage.py`: pipeline stage orchestration.
+- `src/metadata/`: metadata discovery, selection, topic, and bibliography helpers.
+- `src/pdf/`: PDF normalization and ingestion helpers.
+- `src/docling/`: Docling and heuristic document processing.
+- `src/claims/`: claim extraction helpers.
 - `tests/`: validation.
 
 ## Data Flow
 
 ```text
-data/corpus_info/metadata_rules
-  -> data/stages/01_metadata
-  -> data/corpus_info/pdf_retrieval/downloaded_pdfs
-  -> data/stages/02_normalized_pdfs
-  -> data/stages/03_docling_heuristics
-  -> data/stages/04_claims
+data/inputs
+  -> data/candidates/active
+  -> data/papers/{paper_id}/raw/source.pdf
+  -> data/papers/{paper_id}/metadata/source.json
+  -> data/papers/{paper_id}/docling
+  -> data/runtime/claims/{model}/{paper}.claims.json
+```
+
+Canonical paper artifact target mirrors Seaweed:
+
+```text
+data/papers/{paper_id}/...
+papers/{paper_id}/...
 ```
 
 ## CLI Shape
 
 ```bash
-python ops/scripts/local/cli.py metadata --help
-python ops/scripts/local/cli.py pdfs --help
-python ops/scripts/local/cli.py pipeline --help
-python ops/scripts/local/cli.py claims --help
-python ops/scripts/local/cli.py bridge --help
+python -m src.cli metadata --help
+python -m src.cli pdfs --help
+python -m src.cli docling --help
+python -m src.cli claims --help
+python -m src.cli bridge --help
 ```
 
-`ops/scripts/local/commands.py` owns commands, flags, handlers, and parser construction.
+`src/cli.py` owns commands, flags, handlers, and parser construction.
 
 `src/config.py` stays outside CLI because it is shared runtime state for CLI, stages, tools, and helper scripts.

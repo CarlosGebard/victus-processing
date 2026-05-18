@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.docling_heuristics_pipeline.section_classifier import SectionCandidate
+    from src.docling.section_classifier import SectionCandidate
 
 
 SECTION_CLASSIFIER_SYSTEM_PROMPT = """You classify section titles from scientific papers.
@@ -34,7 +34,19 @@ Rules:
 - If uncertain, return "uncertain".
 - Infer meaning from the title, not only exact string matches.
 - The paper title is provided for context only.
-- Return valid JSON only.
+
+Output format:
+- Return only a raw JSON object.
+- Do not include markdown, code fences, comments, prose, or extra keys.
+- The top-level object must contain only the key "decisions".
+- "decisions" must be an array.
+- Return exactly one decision object for every input section id.
+- Each decision object must contain exactly these keys: "id", "decision".
+- "id" must match one input section id exactly.
+- "decision" must be exactly one of: "keep", "drop", "uncertain".
+
+Exact JSON shape:
+{"decisions":[{"id":"<section id>","decision":"keep"}]}
 """
 
 
@@ -45,6 +57,6 @@ def build_section_classifier_user_prompt(paper_title: str, sections: list["Secti
     return (
         f"Paper title:\n{paper_title}\n\n"
         f"Section titles:\n{numbered_list}\n\n"
-        "Return JSON with this shape:\n"
-        '{"decisions":[{"id":"...","decision":"keep|drop|uncertain","reason":"..."}]}'
+        "Return only this JSON shape, with one object per section id:\n"
+        '{"decisions":[{"id":"<section id>","decision":"keep|drop|uncertain"}]}'
     )

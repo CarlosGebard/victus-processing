@@ -60,5 +60,5 @@ Full `pytest tests -q` currently hits stale `analytics/` tests. Track that in [r
 - [Security](docs/security.md)
 - [Tests](docs/tests.md)
 - [Roadmap](docs/roadmap.md)
-- [Local CLI](ops/scripts/local/README.md)
+- [Local CLI](docs/local-cli.md)
 - [Bridge CLI](ops/scripts/bridge/README.md)

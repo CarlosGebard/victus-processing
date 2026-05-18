@@ -9,12 +9,13 @@ dependencies = [
     "torch",
     "openai==2.29.0",
     "psycopg[binary]>=3.2,<4",
+    "redis>=5.2,<6",
     "requests==2.32.5",
     "PyYAML==6.0.3",
 ]
 
 [project.scripts]
-victus-processing = "ops.scripts.local.commands:main"
+victus-processing = "src.cli:main"
 victus-bridge = "ops.scripts.bridge.victus_ingest_bridge.cli:main"
 
 [dependency-groups]

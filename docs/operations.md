@@ -29,7 +29,7 @@ victus-processing pdfs normalize
 Run Docling and heuristics:
 
 ```bash
-victus-processing pipeline run
+victus-processing docling run
 ```
 
 Extract claims:
@@ -41,7 +41,6 @@ victus-processing claims extract --skip-existing
 Single-paper test:
 
 ```bash
-victus-processing pipeline single-paper --doi 10.1000/demo
 ```
 
 ## Bridge Commands

@@ -11,7 +11,7 @@ victus-processing
 Path fallback:
 
 ```bash
-python ops/scripts/local/cli.py
+python -m src.cli
 ```
 
 Public command groups:
@@ -40,13 +40,16 @@ Defaults come from `config.yaml`.
 
 | Purpose | Default path |
 |---|---|
-| metadata | `data/stages/01_metadata` |
-| raw PDFs | `data/corpus_info/pdf_retrieval/downloaded_pdfs` |
-| unmatched PDFs | `data/corpus_info/pdf_retrieval/unmatched_pdf` |
-| normalized PDFs | `data/stages/02_normalized_pdfs` |
-| Docling + heuristics | `data/stages/03_docling_heuristics` |
-| claims | `data/stages/04_claims` |
-| testing | `data/archive/testing_1` |
+| metadata candidates | `data/candidates/active` |
+| discarded candidates | `data/candidates/discarded` |
+| paper mirror | `data/papers/{paper_id}` |
+| raw PDF | `data/papers/{paper_id}/raw/source.pdf` |
+| metadata | `data/papers/{paper_id}/metadata/source.json` |
+| Docling + heuristics | `data/papers/{paper_id}/docling/` |
+| claims | `data/runtime/claims/{model}/{paper}.claims.json` |
+| unmapped raw PDFs | `data/runtime/pdf_retrieval/unmapped_raw` |
+| registry | `data/registry` |
+| testing | `data/archive/experiments/testing_1` |
 
 ## Env Vars
 
@@ -67,55 +70,6 @@ Bridge:
 - `VICTUS_S3_SECRET_KEY`
 - `VICTUS_S3_BUCKET`
 - `VICTUS_AWS_REGION`
-
-## Bridge Events
-
-Event prefix:
-
-- input `artifact:done` publishes as `victus:artifact:done`
-- already-prefixed `victus:*` values are preserved
-
-Reserved events:
-
-- `victus:artifact:done`
-- `victus:stage:started`
-- `victus:stage:done`
-- `victus:error`
-
-Bridge payloads include `timestamp`. Payloads tied to a paper include `id`.
-
-## Bridge Storage
-
-Default bucket:
-
-```text
-victus-corpus
-```
-
-Paper prefix:
-
-```text
-papers/{paper_id}/
-```
-
-Raw PDF object key:
-
-```text
-papers/{paper_id}/raw/source.pdf
-```
-
-## Bridge Registry
-
-Expected table: `paper_registry`.
-
-Fields read or written:
-
-- `paper_id`
-- `doi`
-- `s3_prefix`
-- `status_proc`
-- `status_rag`
-- `last_event`
 
 Known statuses:
 
