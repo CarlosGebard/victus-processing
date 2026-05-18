@@ -20,6 +20,9 @@ DATA_INPUT_RULES_DIR = DATA_INPUTS_DIR / "rules"
 DATA_INPUT_IMPORTS_DIR = DATA_INPUTS_DIR / "imports"
 DATA_REGISTRY_DIR = DATA_DIR / "registry"
 DATA_RUNTIME_DIR = DATA_DIR / "runtime"
+DATA_RUNTIME_CANDIDATES_DIR = DATA_RUNTIME_DIR / "01_candidates"
+DATA_RUNTIME_CANDIDATES_ACTIVE_DIR = DATA_RUNTIME_CANDIDATES_DIR / "active"
+DATA_RUNTIME_CANDIDATES_DISCARDED_DIR = DATA_RUNTIME_CANDIDATES_DIR / "discarded"
 DATA_RUNTIME_PDF_RETRIEVAL_DIR = DATA_RUNTIME_DIR / "pdf_retrieval"
 DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "pdfs"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
@@ -104,11 +107,11 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
 
     metadata_dir = resolve_project_path(
         storage_cfg.get("papers_dir"),
-        DATA_CANDIDATES_ACTIVE_DIR,
+        DATA_RUNTIME_CANDIDATES_ACTIVE_DIR,
     )
     discarded_dir = resolve_project_path(
         storage_cfg.get("discarded_dir"),
-        DATA_CANDIDATES_DISCARDED_DIR,
+        DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
     )
     registry_dir = resolve_project_path(
         storage_cfg.get("registry_dir"),
@@ -207,8 +210,6 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_SOURCES_DIR,
         DATA_STAGES_DIR,
         DATA_CANDIDATES_DIR,
-        DATA_CANDIDATES_ACTIVE_DIR,
-        DATA_CANDIDATES_DISCARDED_DIR,
         DATA_PAPERS_DIR,
         DATA_INPUTS_DIR,
         DATA_INPUT_SEEDS_DIR,
@@ -216,6 +217,9 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_INPUT_IMPORTS_DIR,
         DATA_REGISTRY_DIR,
         DATA_RUNTIME_DIR,
+        DATA_RUNTIME_CANDIDATES_DIR,
+        DATA_RUNTIME_CANDIDATES_ACTIVE_DIR,
+        DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
         DATA_RUNTIME_PDF_RETRIEVAL_DIR,
         DATA_RUNTIME_PDFS_DIR,
         DATA_RUNTIME_DOCLING_DIR,

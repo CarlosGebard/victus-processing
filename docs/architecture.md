@@ -27,30 +27,11 @@ This repo does not own analytics, deployment infrastructure, Qdrant, RAG indexin
 
 ```text
 data/inputs
-  -> data/candidates/active
+  -> data/runtime/01_candidates/active
   -> data/papers/{paper_id}/raw/source.pdf
   -> data/papers/{paper_id}/metadata/source.json
   -> data/papers/{paper_id}/docling
   -> data/runtime/claims/{model}/{paper}.claims.json
 ```
 
-Canonical paper artifact target mirrors Seaweed:
 
-```text
-data/papers/{paper_id}/...
-papers/{paper_id}/...
-```
-
-## CLI Shape
-
-```bash
-python -m src.cli metadata --help
-python -m src.cli pdfs --help
-python -m src.cli docling --help
-python -m src.cli claims --help
-python -m src.cli bridge --help
-```
-
-`src/cli.py` owns commands, flags, handlers, and parser construction.
-
-`src/config.py` stays outside CLI because it is shared runtime state for CLI, stages, tools, and helper scripts.

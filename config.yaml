@@ -24,8 +24,8 @@ rate_limit:
   retries: 5
 
 storage:
-  papers_dir: "data/candidates/active"
-  discarded_dir: "data/candidates/discarded"
+  papers_dir: "data/runtime/01_candidates/active"
+  discarded_dir: "data/runtime/01_candidates/discarded"
   registry_dir: "data/registry"
   raw_pdf_dir: "data/runtime/pdf_retrieval/raw"
   unmatched_pdf_dir: "data/runtime/pdf_retrieval/unmatched"

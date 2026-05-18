@@ -11,7 +11,8 @@ from src import artifacts
 @pytest.mark.parametrize(
     ("key", "expected"),
     [
-        ("metadata_dir", "data/candidates/active"),
+        ("metadata_dir", "data/runtime/01_candidates/active"),
+        ("discarded_dir", "data/runtime/01_candidates/discarded"),
         ("raw_pdf_dir", "data/runtime/pdf_retrieval/raw"),
         ("unmatched_pdf_dir", "data/runtime/pdf_retrieval/unmatched"),
         ("docling_input_dir", "data/runtime/pdfs/normalized"),
