@@ -1,0 +1,15 @@
+docling_ingestion:
+  input_dir: "data/runtime/pdfs/normalized"
+  output_dir: "data/runtime/docling"
+
+heuristics:
+  full_dir: "data/runtime/docling"
+  final_dir: "data/runtime/docling"
+
+llm_to_claim:
+  input_dir: "data/runtime/docling"
+  output_dir: "data/runtime/claims"
+  model: "gpt-5-mini"
+  max_claims: 20
+  auto_approve_max_tokens: 7000
+  temperature: 0.0

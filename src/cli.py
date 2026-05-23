@@ -6,16 +6,17 @@ from pathlib import Path
 from src import config as ctx
 from src.claims.stage import run_llm_to_claim_flow
 from src.data_layout.create import create_data_layout
-from src.docling.stage import run_docling_flow
 from src.metadata.bibliography import generate_bib_flow
 from src.metadata import from_doi, gap_seed_dois, seed_dois
-from src.metadata.stage import run_metadata_exploration_flow
-from src.pdf import normalize_from_relations
+from src.pdf_extraction import normalize_from_relations
+from src.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
+
+run_metadata_exploration_flow = None
 
 
 CLI_DESCRIPTION = (
     "CLI profesional para el pipeline de papers. "
-    "Organizada por dominios: metadata, bib, pdfs, docling, claims, bridge y data-layout."
+    "Organizada por dominios: metadata, bib, pdfs, pdf-processing, claims, bridge y data-layout."
 )
 
 
@@ -28,6 +29,12 @@ def _optional_resolved(path: Path | None) -> Path | None:
 
 
 def cmd_metadata_explore(args: argparse.Namespace) -> None:
+    global run_metadata_exploration_flow
+    if run_metadata_exploration_flow is None:
+        from src.metadata.stage import run_metadata_exploration_flow as loaded_run_metadata_exploration_flow
+
+        run_metadata_exploration_flow = loaded_run_metadata_exploration_flow
+
     run_metadata_exploration_flow(mode=args.mode)
 
 
@@ -51,10 +58,10 @@ def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
 
 def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
     if args.mode == "broad-nutrition":
-        metadata_dir = _resolved(args.metadata_dir)
-        explored_dois_file = _resolved(args.explored_dois)
-        terms_file = _resolved(args.terms_file)
-        output_path = _resolved(args.output)
+        metadata_dir = ctx.METADATA_DIR.resolve()
+        explored_dois_file = ctx.EXPLORATION_COMPLETED_SEED_DOI_FILE.resolve()
+        terms_file = seed_dois.DEFAULT_TERMS_FILE.resolve()
+        output_path = seed_dois.DEFAULT_OUTPUT_FILE.resolve()
         if not metadata_dir.exists():
             raise SystemExit(f"No existe metadata_dir: {metadata_dir}")
         if not terms_file.exists():
@@ -86,13 +93,12 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
             )
         return
     if args.mode == "dataset-gaps":
-        papers_csv = _resolved(args.papers_csv)
-        unclassified_csv = _resolved(args.unclassified_csv)
-        metadata_dir = _resolved(args.metadata_dir)
-        explored_dois_file = _resolved(args.explored_dois)
-        topics_file = _resolved(args.topics_file)
-        output_arg = gap_seed_dois.DEFAULT_OUTPUT_FILE if args.output == seed_dois.DEFAULT_OUTPUT_FILE else args.output
-        output_path = _resolved(output_arg)
+        papers_csv = ctx.PRE_INGESTION_PAPERS_CSV.resolve()
+        unclassified_csv = (ctx.PRE_INGESTION_AUDIT_DIR / "unclassified_papers.csv").resolve()
+        metadata_dir = ctx.METADATA_DIR.resolve()
+        explored_dois_file = ctx.EXPLORATION_COMPLETED_SEED_DOI_FILE.resolve()
+        topics_file = gap_seed_dois.DEFAULT_TOPICS_FILE.resolve()
+        output_path = gap_seed_dois.DEFAULT_OUTPUT_FILE.resolve()
         if not papers_csv.exists():
             raise SystemExit(f"No existe papers_csv: {papers_csv}")
         if not metadata_dir.exists():
@@ -164,11 +170,22 @@ def cmd_pdfs_normalize(args: argparse.Namespace) -> None:
     print(f"- Omitidos: {skipped}")
 
 
-def cmd_docling_run(args: argparse.Namespace) -> None:
-    run_docling_flow(
-        runners=args.runners,
-        pdf_path=_optional_resolved(args.pdf),
-    )
+def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
+    common_kwargs = {
+        "output_dir": _optional_resolved(args.output_dir),
+        "prompt_first_batch": _optional_resolved(args.prompt_first_batch),
+        "prompt_continuation_batch": _optional_resolved(args.prompt_continuation_batch),
+        "force_markdown": args.force_markdown,
+        "max_batches": args.max_batches,
+    }
+    if args.pdf:
+        output_path = run_pdf_processing(_resolved(args.pdf), **common_kwargs)
+        print(f"[OK] PDF processing output: {ctx.display_path(output_path)}")
+        return
+    outputs = run_pdf_processing_dir(_resolved(args.input_dir), limit=args.limit, workers=args.workers, **common_kwargs)
+    print(f"[OK] PDF processing outputs: {len(outputs)}")
+    for output_path in outputs:
+        print(f"- {ctx.display_path(output_path)}")
 
 
 def cmd_claims_extract(args: argparse.Namespace) -> None:
@@ -282,27 +299,6 @@ def _add_metadata_group(subparsers: argparse._SubParsersAction[argparse.Argument
         ),
     )
     metadata_seed_dois_parser.add_argument(
-        "--metadata-dir",
-        type=Path,
-        default=ctx.METADATA_DIR,
-        help=f"Directorio de metadata canonica local (default: {ctx.display_path(ctx.METADATA_DIR)})",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--explored-dois",
-        type=Path,
-        default=ctx.EXPLORATION_COMPLETED_SEED_DOI_FILE,
-        help="Txt con DOIs ya explorados para excluir.",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--output",
-        type=Path,
-        default=seed_dois.DEFAULT_OUTPUT_FILE,
-        help=(
-            "Txt output con un DOI por linea. "
-            "Para --mode dataset-gaps, default cambia internamente a exploration.seed_doi_file."
-        ),
-    )
-    metadata_seed_dois_parser.add_argument(
         "--min-citations",
         type=int,
         default=seed_dois.DEFAULT_MIN_CITATIONS,
@@ -313,30 +309,6 @@ def _add_metadata_group(subparsers: argparse._SubParsersAction[argparse.Argument
         type=int,
         default=200,
         help="Cantidad maxima de DOIs a escribir.",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--terms-file",
-        type=Path,
-        default=seed_dois.DEFAULT_TERMS_FILE,
-        help="Solo broad-nutrition: txt editable con keywords o raices, una por linea.",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--papers-csv",
-        type=Path,
-        default=ctx.PRE_INGESTION_PAPERS_CSV,
-        help="Solo dataset-gaps: CSV base del workspace pre-ingestion.",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--unclassified-csv",
-        type=Path,
-        default=ctx.PRE_INGESTION_AUDIT_DIR / "unclassified_papers.csv",
-        help="Solo dataset-gaps: CSV de papers no clasificados del audit.",
-    )
-    metadata_seed_dois_parser.add_argument(
-        "--topics-file",
-        type=Path,
-        default=gap_seed_dois.DEFAULT_TOPICS_FILE,
-        help="Solo dataset-gaps: YAML editable con gaps tematicos y terminos asociados.",
     )
     metadata_seed_dois_parser.set_defaults(handler=cmd_metadata_seed_dois)
 
@@ -408,30 +380,58 @@ def _add_pdfs_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     pdfs_normalize_parser.set_defaults(handler=cmd_pdfs_normalize)
 
 
-def _add_docling_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    docling_parser = subparsers.add_parser(
-        "docling",
-        help="Conversion Docling + heuristics sobre PDFs normalizados",
+def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    defaults = load_pdf_processing_config()
+    pdf_processing_parser = subparsers.add_parser(
+        "pdf-processing",
+        help="Docling Markdown y extraccion Gemini desde PDFs cientificos",
     )
-    docling_subparsers = docling_parser.add_subparsers(dest="docling_command")
+    pdf_processing_subparsers = pdf_processing_parser.add_subparsers(dest="pdf_processing_command")
 
-    docling_run_parser = docling_subparsers.add_parser(
+    run_parser = pdf_processing_subparsers.add_parser(
         "run",
-        help=f"Ejecuta docling + heuristics en {ctx.display_path(ctx.DOCLING_HEURISTICS_DIR)}",
+        help="Convierte PDF con Docling, procesa batches con Gemini y genera paper.processed.json",
     )
-    docling_run_parser.add_argument(
-        "--runners",
+    run_parser.add_argument("--pdf", type=Path, default=None, help="PDF cientifico puntual de entrada")
+    run_parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=defaults.input_dir,
+        help=f"Directorio de PDFs de entrada (default: {ctx.display_path(defaults.input_dir)})",
+    )
+    run_parser.add_argument(
+        "--limit",
         type=int,
-        default=1,
-        help="Cantidad de subprocess runners para procesar PDFs en paralelo",
+        default=None,
+        help="Cantidad maxima de PDFs a procesar desde --input-dir",
     )
-    docling_run_parser.add_argument(
-        "--pdf",
+    run_parser.add_argument(
+        "--workers",
+        type=int,
+        default=defaults.workers,
+        help=f"PDFs a procesar en paralelo (default: {defaults.workers})",
+    )
+    run_parser.add_argument(
+        "--output-dir",
         type=Path,
         default=None,
-        help="PDF normalizado puntual para procesar. Si se omite, usa todos los pendientes.",
+        help=f"Directorio runtime de salida (default: {ctx.display_path(defaults.output_dir)})",
     )
-    docling_run_parser.set_defaults(handler=cmd_docling_run)
+    run_parser.add_argument("--prompt-first-batch", type=Path, default=None, help="Prompt alternativo para primer batch")
+    run_parser.add_argument(
+        "--prompt-continuation-batch",
+        type=Path,
+        default=None,
+        help="Prompt alternativo para batches de continuacion",
+    )
+    run_parser.add_argument("--force-markdown", action="store_true", help="Regenera Markdown Docling existente")
+    run_parser.add_argument(
+        "--max-batches",
+        type=int,
+        default=None,
+        help="Cantidad maxima de batches Markdown a procesar para este PDF",
+    )
+    run_parser.set_defaults(handler=cmd_pdf_processing_run)
 
 
 def _add_claims_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -531,7 +531,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_metadata_group(subparsers)
     _add_bib_group(subparsers)
     _add_pdfs_group(subparsers)
-    _add_docling_group(subparsers)
+    _add_pdf_processing_group(subparsers)
     _add_claims_group(subparsers)
     _add_bridge_group(subparsers)
     _add_data_layout_group(subparsers)

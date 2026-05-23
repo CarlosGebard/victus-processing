@@ -1,0 +1,24 @@
+seed_paper: "DOI:10.1056/NEJM199704173361601"
+
+exploration:
+  mode: "broad-nutrition"
+  limit: 50
+  min_citations: 100
+  min_year: 2000
+  buffer_size: 50
+  max_abstract_words: 300
+  seed_doi_file: "data/inputs/seeds/seed_dois.jsonl"
+  completed_seed_doi_file: "data/inputs/seeds/explored_seed_dois.jsonl"
+
+metadata_selection:
+  model: "gpt-5-mini"
+  abstract_preview_words: 20
+  batch_size: 20
+
+api:
+  semantic_scholar_url: "https://api.semanticscholar.org/graph/v1"
+
+rate_limit:
+  base_delay: 1.0
+  max_delay: 30
+  retries: 5

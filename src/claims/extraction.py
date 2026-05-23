@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
         default=defaults["input_dir"],
         help=(
             "Input final JSON file or directory "
-            f"(default desde config.yaml: {defaults['input_dir']})"
+            f"(default desde config/*.yaml: {defaults['input_dir']})"
         ),
     )
     parser.add_argument(
@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
         default=defaults["output_dir"],
         help=(
             "Output JSON file or directory "
-            f"(default desde config.yaml: {defaults['output_dir']})"
+            f"(default desde config/*.yaml: {defaults['output_dir']})"
         ),
     )
     parser.add_argument("--model", type=str, default=defaults["model"], help="Model name")

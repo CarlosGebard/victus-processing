@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "docling==2.80.0",
+    "httpx>=0.28,<1",
     "torch",
+    "torchvision",
     "openai==2.29.0",
+    "pydantic>=2.12,<3",
     "psycopg[binary]>=3.2,<4",
     "redis>=5.2,<6",
     "requests==2.32.5",
@@ -30,6 +33,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["hatchling"]

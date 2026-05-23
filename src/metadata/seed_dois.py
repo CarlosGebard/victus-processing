@@ -12,7 +12,7 @@ from src.metadata.pre_ingestion_topics import normalize_text
 
 
 DEFAULT_TERMS_FILE = ctx.DATA_SOURCES_DIR / "metadata_seed_dictionary.txt"
-DEFAULT_OUTPUT_FILE = ctx.DATA_SOURCES_DIR / "generated_seed_dois.txt"
+DEFAULT_OUTPUT_FILE = ctx.DATA_SOURCES_DIR / "generated_seed_dois.jsonl"
 DEFAULT_MIN_CITATIONS = int((ctx.CONFIG.get("exploration") or {}).get("min_citations", 100))
 
 
@@ -53,7 +53,12 @@ def load_explored_dois(explored_dois_file: Path) -> set[str]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        explored.add(normalize_doi(line))
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            payload = None
+        doi_value = payload.get("doi") if isinstance(payload, dict) else line
+        explored.add(normalize_doi(str(doi_value or "")))
     return explored
 
 
@@ -136,7 +141,18 @@ def collect_candidate_rows(
 def write_doi_output(rows: list[dict[str, Any]], output_path: Path, *, limit: int | None = None) -> int:
     selected_rows = rows[:limit] if limit is not None else rows
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    content = "\n".join(str(row["doi"]) for row in selected_rows)
+    content = "\n".join(
+        json.dumps(
+            {
+                "doi": str(row["doi"]),
+                "title": str(row.get("title") or ""),
+                "citation_count": int(row.get("citation_count") or 0),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        for row in selected_rows
+    )
     if selected_rows:
         content += "\n"
     output_path.write_text(content, encoding="utf-8")
@@ -148,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Genera un txt con DOIs candidatos para metadata retrieval "
             "usando metadata local, un diccionario editable de keywords "
-            "y exclusion de explored_seed_dois.txt."
+            "y exclusion de explored_seed_dois.jsonl."
         )
     )
     parser.add_argument(

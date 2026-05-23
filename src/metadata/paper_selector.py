@@ -1,16 +1,50 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib import error, request
 
-from src.docling.section_classifier import DEFAULT_DOTENV_PATH, get_env_value
 from src.prompts import (
     build_paper_selector_user_prompt,
     get_paper_selector_system_prompt,
 )
+
+DEFAULT_DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
+
+def load_dotenv(dotenv_path: str | Path = DEFAULT_DOTENV_PATH) -> dict[str, str]:
+    path = Path(dotenv_path).resolve()
+    values: dict[str, str] = {}
+
+    if not path.exists():
+        return values
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            values[key] = value
+
+    return values
+
+
+def get_env_value(name: str, default: str = "", dotenv_path: str | Path = DEFAULT_DOTENV_PATH) -> str:
+    if name in os.environ:
+        env_value = os.environ[name].strip()
+        if env_value:
+            return env_value
+
+    dotenv_values = load_dotenv(dotenv_path)
+    dotenv_value = dotenv_values.get(name, "").strip()
+    return dotenv_value or default
 
 
 OUTPUT_SCHEMA: dict[str, Any] = {

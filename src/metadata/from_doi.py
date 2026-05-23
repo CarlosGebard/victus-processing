@@ -5,6 +5,7 @@ import argparse
 import json
 import random
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,10 @@ REQUEST_INTERVAL_SECONDS = 1.0
 _last_request_ts = 0.0
 
 
+def utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def build_metadata_payload(candidate: dict[str, Any]) -> dict[str, Any]:
     external_ids = candidate.get("externalIds") or {}
     open_access_pdf = candidate.get("openAccessPdf") or {}
@@ -44,6 +49,7 @@ def build_metadata_payload(candidate: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "paperId": candidate.get("paperId"),
+        "created_at": utc_now_iso(),
         "title": candidate.get("title"),
         "year": candidate.get("year"),
         "citationCount": candidate.get("citationCount"),
@@ -124,10 +130,50 @@ def write_metadata_for_doi(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and not overwrite:
+        existing = json.loads(output_path.read_text(encoding="utf-8"))
+        write_reviewed_index_record(existing, output_dir=output_dir)
         return output_path, "skipped_existing"
 
     output_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_reviewed_index_record(metadata, output_dir=output_dir)
     return output_path, "written"
+
+
+def write_reviewed_index_record(record: dict[str, Any], *, output_dir: Path) -> None:
+    doi = normalize_doi(str(record.get("doi") or ""))
+    if not doi:
+        return
+    index_path = output_dir.parent / "reviewed.jsonl"
+    records: dict[str, dict[str, Any]] = {}
+    if index_path.exists():
+        for raw_line in index_path.read_text(encoding="utf-8").splitlines():
+            if not raw_line.strip():
+                continue
+            try:
+                payload = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            existing_doi = normalize_doi(str(payload.get("doi") or ""))
+            if existing_doi:
+                records[existing_doi] = payload
+
+    payload = {
+        "doi": doi,
+        "status": "kept",
+        "dataset": "dataset_nutrition",
+        "created_at": str(record.get("created_at") or utc_now_iso()),
+    }
+    paper_id = str(record.get("paperId") or "").strip()
+    if paper_id:
+        payload["paperId"] = paper_id
+    if doi in records and records[doi].get("created_at"):
+        payload["created_at"] = records[doi]["created_at"]
+    records[doi] = payload
+
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with index_path.open("w", encoding="utf-8") as handle:
+        for item in sorted(records.values(), key=lambda value: str(value.get("doi") or "")):
+            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def build_parser() -> argparse.ArgumentParser:

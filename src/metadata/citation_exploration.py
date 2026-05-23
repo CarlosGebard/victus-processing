@@ -4,6 +4,7 @@ import json
 import random
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -78,8 +79,12 @@ def normalize_selection_mode(selection_mode: str) -> str:
 def discarded_index_mode(selection_mode: str | None) -> str:
     normalized = normalize_selection_mode(selection_mode or "broad-nutrition")
     if normalized == "dataset-gaps":
-        return "dataset-gaps"
-    return "nutrition"
+        return "dataset_gap"
+    return "dataset_nutrition"
+
+
+def utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _collect_processed_ids(directory: Path) -> set[str]:
@@ -101,6 +106,10 @@ def _collect_processed_ids(directory: Path) -> set[str]:
 
 def discarded_index_path() -> Path:
     return discarded_dir / "discarded.jsonl"
+
+
+def reviewed_index_path() -> Path:
+    return papers_dir.parent / "reviewed.jsonl"
 
 
 def _collect_discarded_index_ids(index_path: Path | None = None) -> set[str]:
@@ -184,7 +193,12 @@ def _load_doi_list(doi_file: Path) -> list[str]:
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
-            normalized = normalize_doi(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = None
+            doi_value = payload.get("doi") if isinstance(payload, dict) else line
+            normalized = normalize_doi(str(doi_value or ""))
             if normalized and normalized not in seen:
                 seeds.append(normalized)
                 seen.add(normalized)
@@ -227,7 +241,15 @@ def _remove_seed_doi_from_queue(doi: str, doi_file: Path) -> None:
 
     for raw_line in doi_file.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if line and not line.startswith("#") and normalize_doi(line) == normalized:
+        doi_value = line
+        if line and not line.startswith("#"):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                doi_value = str(payload.get("doi") or "")
+        if line and not line.startswith("#") and normalize_doi(doi_value) == normalized:
             continue
         kept_lines.append(raw_line)
 
@@ -264,7 +286,7 @@ def append_completed_seed_doi(
         return
     doi_file.parent.mkdir(parents=True, exist_ok=True)
     with doi_file.open("a", encoding="utf-8") as fh:
-        fh.write(f"{normalized}\n")
+        fh.write(json.dumps({"doi": normalized}, ensure_ascii=False, sort_keys=True) + "\n")
     if source_doi_file is not None:
         _remove_seed_doi_from_queue(normalized, source_doi_file)
 
@@ -309,6 +331,7 @@ def paper_to_metadata_record(
 
     return {
         "paperId": paper["paperId"],
+        "created_at": utc_now_iso(),
         "title": paper.get("title"),
         "year": paper.get("year"),
         "citationCount": paper.get("citationCount"),
@@ -361,6 +384,7 @@ def _merge_metadata_record(existing: dict[str, Any], incoming: dict[str, Any]) -
         }
     )
     merged["is_seed_paper"] = bool(existing.get("is_seed_paper")) or bool(incoming.get("is_seed_paper"))
+    merged["created_at"] = existing.get("created_at") or incoming.get("created_at") or utc_now_iso()
     return merged
 
 
@@ -374,9 +398,26 @@ def _discard_index_payload(
         raise ValueError("Paper descartado sin DOI; no se puede escribir discarded.jsonl.")
     payload = {
         "doi": doi,
-        "mode": discarded_index_mode((selection or {}).get("mode")),
+        "dataset": discarded_index_mode((selection or {}).get("mode")),
+        "created_at": utc_now_iso(),
     }
     paper_id = str(paper.get("paperId") or "").strip()
+    if paper_id:
+        payload["paperId"] = paper_id
+    return payload
+
+
+def _review_index_payload(record: dict[str, Any], *, status: str, dataset: str) -> dict[str, Any] | None:
+    doi = normalize_doi(str(record.get("doi") or ""))
+    if not doi:
+        return None
+    payload = {
+        "doi": doi,
+        "status": status,
+        "dataset": dataset,
+        "created_at": str(record.get("created_at") or utc_now_iso()),
+    }
+    paper_id = str(record.get("paperId") or "").strip()
     if paper_id:
         payload["paperId"] = paper_id
     return payload
@@ -413,6 +454,23 @@ def _write_discarded_index_record(
     doi = normalize_doi(str(record.get("doi") or ""))
     if not doi:
         return
+    if doi in records and records[doi].get("created_at"):
+        record["created_at"] = records[doi]["created_at"]
+    records[doi] = record
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with index_path.open("w", encoding="utf-8") as handle:
+        for item in sorted(records.values(), key=lambda value: str(value.get("doi") or "")):
+            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _write_reviewed_index_record(record: dict[str, Any], index_path: Path | None = None) -> None:
+    index_path = index_path or reviewed_index_path()
+    records = _load_discarded_index(index_path)
+    doi = normalize_doi(str(record.get("doi") or ""))
+    if not doi:
+        return
+    if doi in records and records[doi].get("created_at"):
+        record["created_at"] = records[doi]["created_at"]
     records[doi] = record
     index_path.parent.mkdir(parents=True, exist_ok=True)
     with index_path.open("w", encoding="utf-8") as handle:
@@ -436,6 +494,7 @@ def _ensure_parent_saved(
     *,
     parent_paper: dict[str, Any] | None = None,
     seed_doi: str | None = None,
+    selection_mode: str = "broad-nutrition",
     processed_papers: set[str] | None = None,
 ) -> None:
     if not parent or parent_paper is None:
@@ -447,6 +506,7 @@ def _ensure_parent_saved(
         parent=None,
         seed_doi=seed_doi,
         is_seed_paper=False,
+        selection_mode=selection_mode,
         processed_papers=processed_papers,
     )
 
@@ -458,12 +518,14 @@ def save_paper(
     parent_paper: dict[str, Any] | None = None,
     seed_doi: str | None = None,
     is_seed_paper: bool = False,
+    selection_mode: str = "broad-nutrition",
     processed_papers: set[str] | None = None,
 ) -> None:
     _ensure_parent_saved(
         parent,
         parent_paper=parent_paper,
         seed_doi=seed_doi,
+        selection_mode=selection_mode,
         processed_papers=processed_papers,
     )
     file_stem = _paper_file_stem(paper)
@@ -481,6 +543,13 @@ def save_paper(
         incoming = _merge_metadata_record(existing, incoming)
 
     file_path.write_text(json.dumps(incoming, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    review_record = _review_index_payload(
+        incoming,
+        status="kept",
+        dataset=discarded_index_mode(selection_mode),
+    )
+    if review_record is not None:
+        _write_reviewed_index_record(review_record)
 
     if processed_papers is not None:
         processed_papers.update(_record_identifiers(incoming))
@@ -499,10 +568,18 @@ def save_discarded(
         parent,
         parent_paper=parent_paper,
         seed_doi=seed_doi,
+        selection_mode=str((selection or {}).get("mode") or "broad-nutrition"),
         processed_papers=processed_papers,
     )
     incoming = _discard_index_payload(paper, selection=selection)
     _write_discarded_index_record(incoming)
+    review_record = _review_index_payload(
+        incoming,
+        status="discarded",
+        dataset=str(incoming.get("dataset") or "dataset_nutrition"),
+    )
+    if review_record is not None:
+        _write_reviewed_index_record(review_record)
 
     if processed_papers is not None:
         processed_papers.update(_record_identifiers(incoming))
@@ -620,6 +697,7 @@ def _process_selection_batch(
             parent=parent,
             parent_paper=parent_paper,
             seed_doi=seed_doi,
+            selection_mode=selection_mode,
             processed_papers=processed_papers,
         )
         accepted += 1

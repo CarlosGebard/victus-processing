@@ -32,8 +32,8 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("metadata", "seed-dois", "--help"),
         ("bib", "generate", "--help"),
         ("pdfs", "normalize", "--help"),
-        ("docling", "--help"),
-        ("docling", "run", "--help"),
+        ("pdf-processing", "--help"),
+        ("pdf-processing", "run", "--help"),
         ("claims", "extract", "--help"),
         ("bridge", "--help"),
         ("data-layout", "create", "--help"),
@@ -50,7 +50,7 @@ def test_main_help_exposes_domain_contract_groups() -> None:
     result = run_cli("--help")
 
     assert result.returncode == 0
-    for group in ("metadata", "bib", "pdfs", "docling", "claims", "bridge", "data-layout"):
+    for group in ("metadata", "bib", "pdfs", "pdf-processing", "claims", "bridge", "data-layout"):
         assert group in result.stdout
 
 
@@ -79,22 +79,18 @@ def test_main_routes_metadata_seed_dois(monkeypatch, tmp_path: Path) -> None:
     metadata_dir = tmp_path / "metadata"
     terms_file.write_text("diet\n", encoding="utf-8")
     metadata_dir.mkdir()
+    output_file = tmp_path / "generated_seed_dois.jsonl"
+    explored_file = tmp_path / "explored_seed_dois.jsonl"
 
     monkeypatch.setattr(
         sys,
         "argv",
-        [
-            "cli.py",
-            "metadata",
-            "seed-dois",
-            "--mode",
-            "broad-nutrition",
-            "--metadata-dir",
-            str(metadata_dir),
-            "--terms-file",
-            str(terms_file),
-        ],
+        ["cli.py", "metadata", "seed-dois", "--mode", "broad-nutrition"],
     )
+    monkeypatch.setattr(cli.ctx, "METADATA_DIR", metadata_dir)
+    monkeypatch.setattr(cli.ctx, "EXPLORATION_COMPLETED_SEED_DOI_FILE", explored_file)
+    monkeypatch.setattr(cli.seed_dois, "DEFAULT_TERMS_FILE", terms_file)
+    monkeypatch.setattr(cli.seed_dois, "DEFAULT_OUTPUT_FILE", output_file)
     monkeypatch.setattr(cli.seed_dois, "load_keyword_dictionary", lambda terms_file: ["diet"])
     monkeypatch.setattr(cli.seed_dois, "load_explored_dois", lambda explored_dois_file: {"10.1000/seen"})
     monkeypatch.setattr(
@@ -171,22 +167,24 @@ def test_main_routes_claims_extract(monkeypatch, tmp_path: Path) -> None:
     ]
 
 
-def test_main_routes_docling_run_with_runners(monkeypatch, tmp_path: Path) -> None:
+def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
     called: list[dict[str, object]] = []
     pdf_path = tmp_path / "paper.pdf"
 
     monkeypatch.setattr(
         sys,
         "argv",
-        ["cli.py", "docling", "run", "--runners", "3", "--pdf", str(pdf_path)],
+        ["cli.py", "pdf-processing", "run", "--pdf", str(pdf_path), "--force-markdown"],
     )
-    monkeypatch.setattr(cli, "run_docling_flow", lambda **kwargs: called.append(kwargs))
+    monkeypatch.setattr(cli, "run_pdf_processing", lambda pdf, **kwargs: called.append({"pdf": pdf, **kwargs}) or tmp_path / "paper.processed.json")
 
     cli.main()
 
-    assert called == [
-        {
-            "runners": 3,
-            "pdf_path": pdf_path.resolve(),
-        }
-    ]
+    assert called == [{
+        "pdf": pdf_path.resolve(),
+        "output_dir": None,
+        "prompt_first_batch": None,
+        "prompt_continuation_batch": None,
+        "force_markdown": True,
+        "max_batches": None,
+    }]

@@ -27,11 +27,10 @@ This repo does not own analytics, deployment infrastructure, Qdrant, RAG indexin
 
 ```text
 data/inputs
-  -> data/runtime/01_candidates/active
+  -> data/runtime/01-candidates/active
   -> data/papers/{paper_id}/raw/source.pdf
   -> data/papers/{paper_id}/metadata/source.json
   -> data/papers/{paper_id}/docling
   -> data/runtime/claims/{model}/{paper}.claims.json
 ```
-
 

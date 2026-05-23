@@ -20,13 +20,16 @@ DATA_INPUT_RULES_DIR = DATA_INPUTS_DIR / "rules"
 DATA_INPUT_IMPORTS_DIR = DATA_INPUTS_DIR / "imports"
 DATA_REGISTRY_DIR = DATA_DIR / "registry"
 DATA_RUNTIME_DIR = DATA_DIR / "runtime"
-DATA_RUNTIME_CANDIDATES_DIR = DATA_RUNTIME_DIR / "01_candidates"
+DATA_RUNTIME_CANDIDATES_DIR = DATA_RUNTIME_DIR / "01-candidates"
 DATA_RUNTIME_CANDIDATES_ACTIVE_DIR = DATA_RUNTIME_CANDIDATES_DIR / "active"
 DATA_RUNTIME_CANDIDATES_DISCARDED_DIR = DATA_RUNTIME_CANDIDATES_DIR / "discarded"
 DATA_RUNTIME_PDF_RETRIEVAL_DIR = DATA_RUNTIME_DIR / "pdf_retrieval"
 DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "pdfs"
+DATA_RUNTIME_PDFS_ACTIVE_DIR = DATA_RUNTIME_PDFS_DIR / "active"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
+DATA_RUNTIME_PDF_PROCESSING_DIR = DATA_RUNTIME_DIR / "03-pdf_processing"
 DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "claims"
+DATA_RUNTIME_QUOTAS_DIR = DATA_RUNTIME_DIR / "quotas"
 DATA_RUNTIME_TMP_DIR = DATA_RUNTIME_DIR / "tmp"
 DATA_RUNTIME_LOGS_DIR = DATA_RUNTIME_DIR / "logs"
 DATA_RUNTIME_QUEUES_DIR = DATA_RUNTIME_DIR / "queues"
@@ -54,6 +57,7 @@ PRE_INGESTION_DRAFT_TOPICS_YAML = PRE_INGESTION_TOPICS_YAML
 PRE_INGESTION_BOOTSTRAP_RULES_YAML = PRE_INGESTION_EDITABLE_DIR / "bootstrap_rules.yaml"
 PRE_INGESTION_AUDIT_DIR = DATA_REPORTS_AUDITS_DIR / "pre_ingestion"
 CONFIG_FILE = ROOT_DIR / "config.yaml"
+CONFIG_DIR = ROOT_DIR / "config"
 ENV_FILE = ROOT_DIR / ".env"
 
 
@@ -92,10 +96,41 @@ load_env_file()
 
 @lru_cache(maxsize=1)
 def get_config() -> dict[str, Any]:
-    if not CONFIG_FILE.exists():
-        return {}
-    with CONFIG_FILE.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    config: dict[str, Any] = {}
+
+    for config_file in iter_config_files():
+        config = merge_config(config, load_yaml_mapping(config_file))
+
+    if CONFIG_FILE.exists():
+        config = merge_config(config, load_yaml_mapping(CONFIG_FILE))
+
+    return config
+
+
+def iter_config_files(config_dir: Path | None = None) -> tuple[Path, ...]:
+    resolved_config_dir = config_dir or CONFIG_DIR
+    if not resolved_config_dir.exists() or not resolved_config_dir.is_dir():
+        return ()
+    return tuple(sorted(resolved_config_dir.glob("*.yaml")))
+
+
+def load_yaml_mapping(config_file: Path) -> dict[str, Any]:
+    with config_file.open(encoding="utf-8") as f:
+        payload = yaml.safe_load(f) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Config file must contain a YAML mapping: {config_file}")
+    return payload
+
+
+def merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = merge_config(existing, value)
+            continue
+        merged[key] = value
+    return merged
 
 
 def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
@@ -185,7 +220,7 @@ def get_exploration_seed_doi_file(config: dict[str, Any] | None = None) -> Path:
     exploration_cfg = cfg.get("exploration") or {}
     return resolve_project_path(
         exploration_cfg.get("seed_doi_file"),
-        DATA_INPUT_SEEDS_DIR / "seed_dois.txt",
+        DATA_INPUT_SEEDS_DIR / "seed_dois.jsonl",
     )
 
 
@@ -194,7 +229,7 @@ def get_exploration_completed_seed_doi_file(config: dict[str, Any] | None = None
     exploration_cfg = cfg.get("exploration") or {}
     return resolve_project_path(
         exploration_cfg.get("completed_seed_doi_file"),
-        DATA_INPUT_SEEDS_DIR / "explored_seed_dois.txt",
+        DATA_INPUT_SEEDS_DIR / "explored_seed_dois.jsonl",
     )
 
 
@@ -222,8 +257,11 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
         DATA_RUNTIME_PDF_RETRIEVAL_DIR,
         DATA_RUNTIME_PDFS_DIR,
+        DATA_RUNTIME_PDFS_ACTIVE_DIR,
         DATA_RUNTIME_DOCLING_DIR,
+        DATA_RUNTIME_PDF_PROCESSING_DIR,
         DATA_RUNTIME_CLAIMS_DIR,
+        DATA_RUNTIME_QUOTAS_DIR,
         DATA_RUNTIME_TMP_DIR,
         DATA_RUNTIME_LOGS_DIR,
         DATA_RUNTIME_QUEUES_DIR,
@@ -321,13 +359,6 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
     if legacy_candidate.exists() and any(legacy_candidate.glob("*.pdf")):
         return legacy_candidate
     return candidate
-
-
-@lru_cache(maxsize=1)
-def resolve_docling_v2_pipeline_runner() -> Callable[..., dict[str, Any]]:
-    from src.docling.converter import convert_pdf_for_pipeline
-
-    return convert_pdf_for_pipeline
 
 
 @lru_cache(maxsize=1)
