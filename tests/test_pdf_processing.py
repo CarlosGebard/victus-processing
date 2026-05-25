@@ -8,6 +8,7 @@ import pytest
 
 from src.pdf_processing.batching import MarkdownBatchingError, build_markdown_batches
 from src.pdf_processing.gemini import load_gemini_api_keys
+from src.pdf_processing.markdown import load_markdown_status_index, pdf_dir_to_markdown
 from src.pdf_processing.merge import merge_batch_outputs
 from src.pdf_processing.models import PdfProcessingConfig
 from src.pdf_processing.pipeline import _load_or_create_markdown
@@ -197,6 +198,32 @@ def test_gemini_key_loader_accepts_descriptive_gemini_key_names() -> None:
         "GEMINI_KEY_BACKUP_FAST": "backup",
         "GEMINI_KEY_CARLOS_MAIN": "main",
     }
+
+
+def test_pdf_dir_to_markdown_records_done_and_skips_from_status(monkeypatch, tmp_path: Path) -> None:
+    input_dir = tmp_path / "active"
+    output_dir = tmp_path / "processing"
+    input_dir.mkdir()
+    pdf_path = input_dir / "paper-1.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    calls: list[Path] = []
+
+    def fake_pdf_to_markdown(pdf_path: Path, output_path: Path) -> str:
+        calls.append(pdf_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("# Paper\n", encoding="utf-8")
+        return "# Paper\n"
+
+    monkeypatch.setattr("src.pdf_processing.markdown.pdf_to_markdown", fake_pdf_to_markdown)
+
+    outputs = pdf_dir_to_markdown(input_dir, output_dir)
+    skipped_outputs = pdf_dir_to_markdown(input_dir, output_dir)
+
+    assert outputs == skipped_outputs == (output_dir / "paper-1" / "paper.md",)
+    assert calls == [pdf_path]
+    status = load_markdown_status_index(output_dir / "markdown_status.jsonl")
+    assert status["paper-1"]["stage"] == "docling_markdown"
+    assert status["paper-1"]["status"] == "done"
 
 
 def test_gemini_key_scheduler_handles_variable_key_sets(tmp_path) -> None:

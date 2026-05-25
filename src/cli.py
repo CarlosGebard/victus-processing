@@ -9,6 +9,7 @@ from src.workspace.data_layout import create_data_layout
 from src.pdf_extraction.json_to_bib import generate_bib_flow
 from src.metadata import gap_seed_dois, seed_dois
 from src.pdf_extraction import normalize_from_relations
+from src.pdf_processing.markdown import pdf_dir_to_markdown
 from src.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
 
 run_metadata_exploration_flow = None
@@ -184,6 +185,20 @@ def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
         return
     outputs = run_pdf_processing_dir(_resolved(args.input_dir), limit=args.limit, workers=args.workers, **common_kwargs)
     print(f"[OK] PDF processing outputs: {len(outputs)}")
+    for output_path in outputs:
+        print(f"- {ctx.display_path(output_path)}")
+
+
+def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
+    outputs = pdf_dir_to_markdown(
+        _resolved(args.input_dir),
+        _resolved(args.output_dir),
+        limit=args.limit,
+        skip_existing=args.skip_existing,
+        force=args.force,
+        status_file=_optional_resolved(args.status_file),
+    )
+    print(f"[OK] Markdown outputs: {len(outputs)}")
     for output_path in outputs:
         print(f"- {ctx.display_path(output_path)}")
 
@@ -432,6 +447,54 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
         help="Cantidad maxima de batches Markdown a procesar para este PDF",
     )
     run_parser.set_defaults(handler=cmd_pdf_processing_run)
+
+    markdown_parser = pdf_processing_subparsers.add_parser(
+        "markdown",
+        help="Convierte los PDFs activos a paper.md usando solo Docling",
+        description=(
+            "Convierte PDFs a Markdown con Docling sin ejecutar batching ni Gemini. "
+            "Por defecto lee data/runtime/02-pdfs/active y escribe "
+            "data/runtime/03-pdf_processing/<paper_id>/paper.md."
+        ),
+    )
+    markdown_parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=defaults.input_dir,
+        help=f"Directorio de PDFs de entrada (default: {ctx.display_path(defaults.input_dir)})",
+    )
+    markdown_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=defaults.output_dir,
+        help=f"Directorio de salida Markdown (default: {ctx.display_path(defaults.output_dir)})",
+    )
+    markdown_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cantidad maxima de PDFs a convertir.",
+    )
+    markdown_parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Marca como done y no regenera paper.md cuando ya existe.",
+    )
+    markdown_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenera aunque markdown_status.jsonl tenga status done.",
+    )
+    markdown_parser.add_argument(
+        "--status-file",
+        type=Path,
+        default=None,
+        help=(
+            "JSONL de estado para saltar papers done "
+            "(default: <output-dir>/markdown_status.jsonl)."
+        ),
+    )
+    markdown_parser.set_defaults(handler=cmd_pdf_processing_markdown)
 
 
 def _add_claims_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

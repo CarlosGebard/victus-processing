@@ -13,10 +13,11 @@ WORKDIR /app
 COPY --from=uv /uv /uvx /usr/local/bin/
 
 COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
+
 COPY config ./config
 COPY src ./src
 COPY ops ./ops
-
 RUN uv sync --frozen --no-dev
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

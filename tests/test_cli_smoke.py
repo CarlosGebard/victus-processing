@@ -34,6 +34,7 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("pdfs", "normalize", "--help"),
         ("pdf-processing", "--help"),
         ("pdf-processing", "run", "--help"),
+        ("pdf-processing", "markdown", "--help"),
         ("claims", "extract", "--help"),
         ("bridge", "--help"),
         ("data-layout", "create", "--help"),
@@ -188,3 +189,48 @@ def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
         "force_markdown": True,
         "max_batches": None,
     }]
+
+
+def test_main_routes_pdf_processing_markdown(monkeypatch, tmp_path: Path) -> None:
+    called: list[dict[str, object]] = []
+    input_dir = tmp_path / "active"
+    output_dir = tmp_path / "processing"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cli.py",
+            "pdf-processing",
+            "markdown",
+            "--input-dir",
+            str(input_dir),
+            "--output-dir",
+            str(output_dir),
+            "--limit",
+            "2",
+            "--skip-existing",
+            "--force",
+        ],
+    )
+    monkeypatch.setattr(
+        cli,
+        "pdf_dir_to_markdown",
+        lambda input_dir, output_dir, **kwargs: called.append(
+            {"input_dir": input_dir, "output_dir": output_dir, **kwargs}
+        )
+        or (tmp_path / "paper.md",),
+    )
+
+    cli.main()
+
+    assert called == [
+        {
+            "input_dir": input_dir.resolve(),
+            "output_dir": output_dir.resolve(),
+            "limit": 2,
+            "skip_existing": True,
+            "force": True,
+            "status_file": None,
+        }
+    ]
