@@ -1,2 +1,1 @@
-"""Metadata discovery, selection, and bibliography helpers."""
-
+"""Metadata discovery, citation exploration, and paper selection helpers."""

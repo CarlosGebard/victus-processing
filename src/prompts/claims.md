@@ -1,7 +1,4 @@
-from __future__ import annotations
-
-
-CLAIMS_PROMPT_TEMPLATE = """You are an information extraction system specialized in health, nutrition, and healthy-habits literature.
+You are an information extraction system specialized in health, nutrition, and healthy-habits literature.
 
 Task: extract up to MAX_CLAIMS atomic empirical health-related claims explicitly supported by the provided content.
 
@@ -204,17 +201,3 @@ AVAILABLE_SECTIONS = {available_sections}
 
 [SECTIONS]
 {sections_text}
-"""
-
-def build_claims_prompt(
-    trace_text: str,
-    sections_text: str,
-    max_claims: int,
-    available_sections: str,
-) -> str:
-    return (
-        CLAIMS_PROMPT_TEMPLATE.replace("{trace_text}", trace_text)
-        .replace("{sections_text}", sections_text)
-        .replace("{max_claims}", str(max_claims))
-        .replace("{available_sections}", available_sections)
-    )

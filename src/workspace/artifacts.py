@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
+from src.workspace import config as ctx
 
 
 DOI_BASE_NAME_RE = re.compile(r"^doi-(?P<doi_slug>.+)$")

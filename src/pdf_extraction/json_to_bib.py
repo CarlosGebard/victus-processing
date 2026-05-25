@@ -8,8 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
-from src.config import get_config, get_pipeline_paths
+from src.workspace import config as ctx
+from src.workspace.config import get_config, get_pipeline_paths
 
 
 CONFIG = get_config()

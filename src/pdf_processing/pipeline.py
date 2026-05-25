@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
+from src.workspace import config as ctx
 from src.pdf_processing.batching import MarkdownBatchingError, build_markdown_batches
 from src.pdf_processing.gemini import GeminiClient, load_gemini_api_keys
 from src.pdf_processing.markdown import pdf_to_markdown
@@ -96,6 +96,17 @@ def _short_error_description(exc: Exception, *, max_words: int = 200) -> str:
     return " ".join(words[:max_words])
 
 
+async def _load_or_create_markdown(
+    pdf_path: Path,
+    markdown_output: Path,
+    *,
+    force_markdown: bool,
+) -> str:
+    if force_markdown or not markdown_output.exists():
+        return await asyncio.to_thread(pdf_to_markdown, pdf_path, markdown_output)
+    return await asyncio.to_thread(markdown_output.read_text, encoding="utf-8")
+
+
 async def run_pdf_processing_async(
     pdf_path: Path,
     *,
@@ -141,10 +152,10 @@ async def run_pdf_processing_async(
     try:
         print(f"[PROCESSING] {paper_id}")
         try:
-            markdown = (
-                pdf_to_markdown(pdf_path, markdown_output)
-                if force_markdown or not markdown_output.exists()
-                else markdown_output.read_text(encoding="utf-8")
+            markdown = await _load_or_create_markdown(
+                pdf_path,
+                markdown_output,
+                force_markdown=force_markdown,
             )
         except Exception as exc:
             _append_failed_status(status_file, paper_id=paper_id, error="docling_failed", exc=exc)

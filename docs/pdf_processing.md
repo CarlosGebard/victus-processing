@@ -4,7 +4,7 @@
 
 Scientific paper extraction as:
 
-1. PDF -> Markdown with Microsoft MarkItDown.
+1. PDF -> Markdown with Docling.
 2. Markdown batches -> JSON with Gemini.
 3. Batch JSON merge -> final clean JSON.
 
@@ -40,11 +40,7 @@ Process PDFs in parallel:
 uv run victus-processing pdf-processing run --limit 10 --workers 3
 ```
 
-Use MarkItDown LLM mode:
-
-```bash
-uv run victus-processing pdf-processing run --pdf path/to/paper.pdf --markitdown-use-llm
-```
+`--workers` runs multiple PDF pipelines concurrently, including Docling Markdown conversion.
 
 Limit processed Markdown batches:
 
@@ -81,11 +77,11 @@ Per paper:
 
 ```text
 data/runtime/03-pdf_processing/{pdf_stem}/
-  {pdf_stem}.md
+  paper.md
   raw_batches/
     batch_0001.json
     batch_0002.json
-  {pdf_stem}.full.json
+  paper.processed.json
 ```
 
 Shared quota state:

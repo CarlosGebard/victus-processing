@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from src import config as ctx
+from src.workspace import config as ctx
 
 
 def create_data_layout() -> tuple[Path, ...]:

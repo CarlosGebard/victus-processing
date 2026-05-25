@@ -2,5 +2,5 @@ storage:
   papers_dir: "data/runtime/01-candidates/active"
   discarded_dir: "data/runtime/01-candidates/discarded"
   registry_dir: "data/registry"
-  raw_pdf_dir: "data/runtime/pdf_retrieval/raw"
-  unmatched_pdf_dir: "data/runtime/pdf_retrieval/unmatched"
+  raw_pdf_dir: "data/runtime/02-pdfs/active"
+  unmatched_pdf_dir: "data/registry"

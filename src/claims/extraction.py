@@ -9,8 +9,8 @@ from typing import Any, Callable
 
 from openai import OpenAI
 
-from src.config import get_config, get_pipeline_paths
-from src.artifacts import record_claims_run
+from src.workspace.config import get_config, get_pipeline_paths
+from src.workspace.artifacts import record_claims_run
 from src.prompts import build_claims_prompt
 
 

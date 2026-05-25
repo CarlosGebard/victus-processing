@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from src.pdf_processing.batching import MarkdownBatchingError, build_markdown_ba
 from src.pdf_processing.gemini import load_gemini_api_keys
 from src.pdf_processing.merge import merge_batch_outputs
 from src.pdf_processing.models import PdfProcessingConfig
+from src.pdf_processing.pipeline import _load_or_create_markdown
 from src.pdf_processing.quota import GeminiKeyScheduler, SQLiteQuotaRepository
 
 
@@ -219,3 +221,26 @@ def test_gemini_key_scheduler_handles_variable_key_sets(tmp_path) -> None:
         "GEMINI_KEY_CHARLIE",
         "GEMINI_KEY_ALPHA",
     ]
+
+
+def test_docling_markdown_conversion_can_run_concurrently(monkeypatch, tmp_path: Path) -> None:
+    def slow_pdf_to_markdown(pdf_path: Path, output_path: Path) -> str:
+        time.sleep(0.2)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(f"# {pdf_path.stem}", encoding="utf-8")
+        return f"# {pdf_path.stem}"
+
+    monkeypatch.setattr("src.pdf_processing.pipeline.pdf_to_markdown", slow_pdf_to_markdown)
+
+    async def run() -> list[str]:
+        return await asyncio.gather(
+            _load_or_create_markdown(tmp_path / "one.pdf", tmp_path / "one" / "paper.md", force_markdown=True),
+            _load_or_create_markdown(tmp_path / "two.pdf", tmp_path / "two" / "paper.md", force_markdown=True),
+        )
+
+    start = time.perf_counter()
+    results = asyncio.run(run())
+    elapsed = time.perf_counter() - start
+
+    assert results == ["# one", "# two"]
+    assert elapsed < 0.35

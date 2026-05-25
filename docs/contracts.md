@@ -12,10 +12,11 @@ is reserved for compatibility overrides and is merged after `config/*.yaml`.
 - raw PDF: `data/papers/{paper_id}/raw/source.pdf`
 - metadata: `data/papers/{paper_id}/metadata/source.json`
 - Docling + heuristics: `data/papers/{paper_id}/docling/`
-- claims: `data/runtime/claims/{model}/{paper}.claims.json`
-- unmapped raw PDFs: `data/runtime/pdf_retrieval/unmapped_raw`
+- active PDFs: `data/runtime/02-pdfs/active`
+- PDF processing output: `data/runtime/03-pdf_processing`
+- claims: `data/runtime/04-claims_by_model/{model}/{paper}.claims.json`
+- unmapped raw PDFs: `data/registry/unmapped_pdfs.jsonl`
 - registry: `data/registry`
-- testing: `data/archive/experiments/testing_1`
 
 ## Env Vars
 
@@ -45,23 +46,28 @@ data/
         {document_id}.metadata.json
       discarded/
         discarded.jsonl
-    pdf_retrieval/
-    tmp/
-    logs/
-    queues/
+    02-pdfs/
+      active/
+    03-pdf_processing/
+    04-claims_by_model/
+      {model}/
+    quotas/
   papers/
     {paper_id}/
+      raw/
+      metadata/
+      docling/
+      claims/
   registry/
+    links.jsonl
+    papers.jsonl
+    unmapped_pdfs.jsonl
   inputs/
+    generated_seed_dois/
     seeds/
     rules/
-    imports/
   reports/
     audits/
-    exports/
-  archive/
-    legacy/
-    experiments/
 
 
 ```

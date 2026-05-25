@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
-from src.artifacts import normalize_doi
-from src.metadata.pre_ingestion_topics import normalize_text
+from src.workspace import config as ctx
+from src.workspace.artifacts import normalize_doi
+from src.metadata.text import normalize_text
 
 
-DEFAULT_TERMS_FILE = ctx.DATA_SOURCES_DIR / "metadata_seed_dictionary.txt"
-DEFAULT_OUTPUT_FILE = ctx.DATA_SOURCES_DIR / "generated_seed_dois.jsonl"
+DEFAULT_TERMS_FILE = ctx.DATA_INPUT_RULES_DIR / "metadata_seed_dictionary.txt"
+DEFAULT_OUTPUT_FILE = ctx.DATA_INPUT_GENERATED_SEED_DOIS_DIR / "candidates_seed_dois.jsonl"
 DEFAULT_MIN_CITATIONS = int((ctx.CONFIG.get("exploration") or {}).get("min_citations", 100))
 
 

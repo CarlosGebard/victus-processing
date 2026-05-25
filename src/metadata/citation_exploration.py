@@ -11,14 +11,14 @@ from typing import Any, Iterator
 import requests
 from requests import HTTPError
 
-from src.config import (
+from src.workspace.config import (
     EXPLORATION_COMPLETED_SEED_DOI_FILE,
     EXPLORATION_SEED_DOI_FILE,
     get_config,
     get_env_or_config,
     get_pipeline_paths,
 )
-from src.artifacts import build_base_name, normalize_doi
+from src.workspace.artifacts import build_base_name, normalize_doi
 from src.metadata.paper_selector import PaperCandidate, classify_papers_with_openai
 
 
@@ -182,6 +182,55 @@ def fetch_paper_by_doi(doi: str) -> dict[str, Any]:
     if not isinstance(payload, dict) or not payload.get("paperId"):
         raise RuntimeError(f"Seed DOI inválido o no encontrado: {normalized_doi}")
     return payload
+
+
+def metadata_output_path(output_dir: Path, record: dict[str, Any], requested_doi: str) -> Path:
+    doi = str(record.get("doi") or "").strip() or normalize_doi(requested_doi)
+    paper_id = str(record.get("paperId") or "").strip()
+    stem = build_base_name(doi) if doi else paper_id
+    if not stem:
+        raise ValueError("No se pudo construir nombre de archivo para metadata.")
+    return output_dir / f"{stem}.metadata.json"
+
+
+def write_metadata_for_doi(
+    doi: str,
+    *,
+    output_dir: Path,
+    overwrite: bool = False,
+) -> tuple[Path, str]:
+    normalized_doi = normalize_doi(doi)
+    paper = fetch_paper_by_doi(normalized_doi)
+    metadata = paper_to_metadata_record(
+        paper,
+        parent=None,
+        seed_doi=normalized_doi,
+        is_seed_paper=True,
+        abstract_word_limit=10**9,
+    )
+    output_path = metadata_output_path(output_dir, metadata, normalized_doi)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists() and not overwrite:
+        existing = json.loads(output_path.read_text(encoding="utf-8"))
+        review_record = _review_index_payload(
+            existing,
+            status="kept",
+            dataset=discarded_index_mode("broad-nutrition"),
+        )
+        if review_record is not None:
+            _write_reviewed_index_record(review_record, output_dir.parent / "reviewed.jsonl")
+        return output_path, "skipped_existing"
+
+    output_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    review_record = _review_index_payload(
+        metadata,
+        status="kept",
+        dataset=discarded_index_mode("broad-nutrition"),
+    )
+    if review_record is not None:
+        _write_reviewed_index_record(review_record, output_dir.parent / "reviewed.jsonl")
+    return output_path, "written"
 
 
 def _load_doi_list(doi_file: Path) -> list[str]:

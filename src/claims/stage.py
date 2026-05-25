@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
+from src.workspace import config as ctx
 
 
 def run_llm_to_claim_flow(

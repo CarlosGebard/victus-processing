@@ -8,13 +8,14 @@ from typing import Any, Callable
 import yaml
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 DATA_CANDIDATES_DIR = DATA_DIR / "candidates"
 DATA_CANDIDATES_ACTIVE_DIR = DATA_CANDIDATES_DIR / "active"
 DATA_CANDIDATES_DISCARDED_DIR = DATA_CANDIDATES_DIR / "discarded"
 DATA_PAPERS_DIR = DATA_DIR / "papers"
 DATA_INPUTS_DIR = DATA_DIR / "inputs"
+DATA_INPUT_GENERATED_SEED_DOIS_DIR = DATA_INPUTS_DIR / "generated_seed_dois"
 DATA_INPUT_SEEDS_DIR = DATA_INPUTS_DIR / "seeds"
 DATA_INPUT_RULES_DIR = DATA_INPUTS_DIR / "rules"
 DATA_INPUT_IMPORTS_DIR = DATA_INPUTS_DIR / "imports"
@@ -24,11 +25,11 @@ DATA_RUNTIME_CANDIDATES_DIR = DATA_RUNTIME_DIR / "01-candidates"
 DATA_RUNTIME_CANDIDATES_ACTIVE_DIR = DATA_RUNTIME_CANDIDATES_DIR / "active"
 DATA_RUNTIME_CANDIDATES_DISCARDED_DIR = DATA_RUNTIME_CANDIDATES_DIR / "discarded"
 DATA_RUNTIME_PDF_RETRIEVAL_DIR = DATA_RUNTIME_DIR / "pdf_retrieval"
-DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "pdfs"
+DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "02-pdfs"
 DATA_RUNTIME_PDFS_ACTIVE_DIR = DATA_RUNTIME_PDFS_DIR / "active"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
 DATA_RUNTIME_PDF_PROCESSING_DIR = DATA_RUNTIME_DIR / "03-pdf_processing"
-DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "claims"
+DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "04-claims_by_model"
 DATA_RUNTIME_QUOTAS_DIR = DATA_RUNTIME_DIR / "quotas"
 DATA_RUNTIME_TMP_DIR = DATA_RUNTIME_DIR / "tmp"
 DATA_RUNTIME_LOGS_DIR = DATA_RUNTIME_DIR / "logs"
@@ -49,8 +50,8 @@ PDF_RETRIEVAL_DIR = CORPUS_INFO_DIR / "pdf_retrieval"
 LEGACY_PDF_RETIREVAL_DIR = CORPUS_INFO_DIR / "pdf_retireval"
 PRE_INGESTION_DIR = DATA_INPUTS_DIR
 PRE_INGESTION_EDITABLE_DIR = DATA_INPUT_RULES_DIR
-PRE_INGESTION_PAPERS_CSV = DATA_INPUT_IMPORTS_DIR / "papers.csv"
-PRE_INGESTION_CANDIDATE_TERMS_CSV = DATA_INPUT_IMPORTS_DIR / "candidate_terms_top500.csv"
+PRE_INGESTION_PAPERS_CSV = DATA_INPUT_RULES_DIR / "papers.csv"
+PRE_INGESTION_CANDIDATE_TERMS_CSV = DATA_INPUT_RULES_DIR / "candidate_terms_top500.csv"
 PRE_INGESTION_GENERATED_DRAFT_TOPICS_YAML = PRE_INGESTION_EDITABLE_DIR / "draft_topics.generated.yaml"
 PRE_INGESTION_TOPICS_YAML = PRE_INGESTION_EDITABLE_DIR / "topics.yaml"
 PRE_INGESTION_DRAFT_TOPICS_YAML = PRE_INGESTION_TOPICS_YAML
@@ -240,45 +241,29 @@ def get_claims_auto_approve_max_tokens(config: dict[str, Any] | None = None) -> 
 
 
 def get_data_layout_dirs() -> tuple[Path, ...]:
-    return (
+    dirs = (
         DATA_DIR,
         DATA_SOURCES_DIR,
         DATA_STAGES_DIR,
-        DATA_CANDIDATES_DIR,
         DATA_PAPERS_DIR,
         DATA_INPUTS_DIR,
+        DATA_INPUT_GENERATED_SEED_DOIS_DIR,
         DATA_INPUT_SEEDS_DIR,
         DATA_INPUT_RULES_DIR,
-        DATA_INPUT_IMPORTS_DIR,
         DATA_REGISTRY_DIR,
         DATA_RUNTIME_DIR,
         DATA_RUNTIME_CANDIDATES_DIR,
         DATA_RUNTIME_CANDIDATES_ACTIVE_DIR,
         DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
-        DATA_RUNTIME_PDF_RETRIEVAL_DIR,
         DATA_RUNTIME_PDFS_DIR,
         DATA_RUNTIME_PDFS_ACTIVE_DIR,
-        DATA_RUNTIME_DOCLING_DIR,
         DATA_RUNTIME_PDF_PROCESSING_DIR,
         DATA_RUNTIME_CLAIMS_DIR,
         DATA_RUNTIME_QUOTAS_DIR,
-        DATA_RUNTIME_TMP_DIR,
-        DATA_RUNTIME_LOGS_DIR,
-        DATA_RUNTIME_QUEUES_DIR,
         DATA_REPORTS_DIR,
         DATA_REPORTS_AUDITS_DIR,
-        DATA_REPORTS_EXPORTS_DIR,
-        DATA_ARCHIVE_DIR,
-        DATA_ARCHIVE_LEGACY_DIR,
-        DATA_ARCHIVE_EXPERIMENTS_DIR,
-        CSV_DIR,
-        ANALYTICS_DIR,
-        CORPUS_INFO_DIR,
-        METADATA_RULES_DIR,
-        PDF_RETRIEVAL_DIR,
         PRE_INGESTION_EDITABLE_DIR,
         PRE_INGESTION_DIR,
-        PRE_INGESTION_AUDIT_DIR,
         METADATA_DIR,
         DOCLING_INPUT_DIR,
         UNMATCHED_PDF_DIR,
@@ -286,10 +271,8 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         CLAIMS_OUTPUT_DIR,
         REGISTRY_DIR,
         RAW_PDF_DIR,
-        TESTING_ROOT_DIR,
-        TESTING_DOCLING_DIR,
-        TESTING_CLAIMS_DIR,
     )
+    return tuple(dict.fromkeys(dirs))
 
 
 def get_env_or_config(
@@ -363,7 +346,7 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
 
 @lru_cache(maxsize=1)
 def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[int, int]]:
-    from src.pdf.normalization import sync_raw_pdfs_into_input
+    from src.pdf_extraction.normalization import sync_raw_pdfs_into_input
 
     return sync_raw_pdfs_into_input
 

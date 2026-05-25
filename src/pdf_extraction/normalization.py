@@ -10,8 +10,8 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from src import config as ctx
-from src.artifacts import build_base_name, normalize_doi, parse_base_name
+from src.workspace import config as ctx
+from src.workspace.artifacts import build_base_name, normalize_doi, parse_base_name
 
 RAW_PROVENANCE_SUFFIX_RE = re.compile(r"__from-raw-pdf-\d{4}-\d{2}-\d{2}$", flags=re.IGNORECASE)
 
