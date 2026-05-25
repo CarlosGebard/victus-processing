@@ -7,7 +7,7 @@ from src.workspace import config as ctx
 from src.claims.stage import run_llm_to_claim_flow
 from src.workspace.data_layout import create_data_layout
 from src.pdf_extraction.json_to_bib import generate_bib_flow
-from src.metadata import citation_exploration, gap_seed_dois, seed_dois
+from src.metadata import gap_seed_dois, seed_dois
 from src.pdf_extraction import normalize_from_relations
 from src.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
 
@@ -39,6 +39,8 @@ def cmd_metadata_explore(args: argparse.Namespace) -> None:
 
 
 def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
+    from src.metadata import citation_exploration
+
     try:
         output_path, status = citation_exploration.write_metadata_for_doi(
             args.doi,
