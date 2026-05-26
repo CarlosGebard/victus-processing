@@ -196,6 +196,7 @@ def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
         limit=args.limit,
         skip_existing=args.skip_existing,
         force=args.force,
+        max_pages=args.max_pages,
         status_file=_optional_resolved(args.status_file),
     )
     print(f"[OK] Markdown outputs: {len(outputs)}")
@@ -484,6 +485,12 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
         "--force",
         action="store_true",
         help="Regenera aunque markdown_status.jsonl tenga status done.",
+    )
+    markdown_parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=100,
+        help="Marca failed y salta PDFs con mas paginas que este limite (default: 100).",
     )
     markdown_parser.add_argument(
         "--status-file",

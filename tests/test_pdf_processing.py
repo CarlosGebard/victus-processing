@@ -215,6 +215,7 @@ def test_pdf_dir_to_markdown_records_done_and_skips_from_status(monkeypatch, tmp
         return "# Paper\n"
 
     monkeypatch.setattr("src.pdf_processing.markdown.pdf_to_markdown", fake_pdf_to_markdown)
+    monkeypatch.setattr("src.pdf_processing.markdown.get_pdf_page_count", lambda pdf_path: 12)
 
     outputs = pdf_dir_to_markdown(input_dir, output_dir)
     skipped_outputs = pdf_dir_to_markdown(input_dir, output_dir)
@@ -224,6 +225,30 @@ def test_pdf_dir_to_markdown_records_done_and_skips_from_status(monkeypatch, tmp
     status = load_markdown_status_index(output_dir / "markdown_status.jsonl")
     assert status["paper-1"]["stage"] == "docling_markdown"
     assert status["paper-1"]["status"] == "done"
+
+
+def test_pdf_dir_to_markdown_marks_over_page_limit_failed(monkeypatch, tmp_path: Path) -> None:
+    input_dir = tmp_path / "active"
+    output_dir = tmp_path / "processing"
+    input_dir.mkdir()
+    pdf_path = input_dir / "large.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    calls: list[Path] = []
+
+    monkeypatch.setattr("src.pdf_processing.markdown.get_pdf_page_count", lambda pdf_path: 130)
+    monkeypatch.setattr(
+        "src.pdf_processing.markdown.pdf_to_markdown",
+        lambda pdf_path, output_path: calls.append(pdf_path) or "# Paper\n",
+    )
+
+    outputs = pdf_dir_to_markdown(input_dir, output_dir, max_pages=100)
+
+    assert outputs == ()
+    assert calls == []
+    status = load_markdown_status_index(output_dir / "markdown_status.jsonl")
+    assert status["large"]["status"] == "failed"
+    assert status["large"]["error"] == "pdf_page_limit_exceeded"
+    assert status["large"]["page_count"] == 130
 
 
 def test_gemini_key_scheduler_handles_variable_key_sets(tmp_path) -> None:

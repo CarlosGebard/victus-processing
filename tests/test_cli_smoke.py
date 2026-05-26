@@ -211,6 +211,8 @@ def test_main_routes_pdf_processing_markdown(monkeypatch, tmp_path: Path) -> Non
             "2",
             "--skip-existing",
             "--force",
+            "--max-pages",
+            "75",
         ],
     )
     monkeypatch.setattr(
@@ -231,6 +233,7 @@ def test_main_routes_pdf_processing_markdown(monkeypatch, tmp_path: Path) -> Non
             "limit": 2,
             "skip_existing": True,
             "force": True,
+            "max_pages": 75,
             "status_file": None,
         }
     ]

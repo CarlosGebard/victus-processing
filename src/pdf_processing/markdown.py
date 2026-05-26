@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 
 from typing import Any
 
+DEFAULT_MAX_PAGES = 100
+
 
 def build_docling_converter() -> Any:
     from docling.datamodel.base_models import InputFormat
@@ -68,6 +70,17 @@ def iter_pdf_files(input_dir: Path) -> tuple[Path, ...]:
     return tuple(sorted(path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() == ".pdf"))
 
 
+def get_pdf_page_count(pdf_path: Path) -> int:
+    validate_input_pdf(pdf_path)
+    import pypdfium2
+
+    document = pypdfium2.PdfDocument(str(pdf_path))
+    try:
+        return len(document)
+    finally:
+        document.close()
+
+
 def load_markdown_status_index(status_file: Path) -> dict[str, dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     if not status_file.exists():
@@ -107,6 +120,7 @@ def _markdown_status_record(
     status: str,
     error: str | None = None,
     error_description: str | None = None,
+    page_count: int | None = None,
 ) -> dict[str, Any]:
     return {
         "paper_id": paper_id,
@@ -114,6 +128,7 @@ def _markdown_status_record(
         "status": status,
         "source_pdf": str(pdf_path),
         "output_markdown": str(markdown_output),
+        "page_count": page_count,
         "error": error,
         "error_description": error_description,
         "updated_at": _utc_now_iso(),
@@ -127,10 +142,13 @@ def pdf_dir_to_markdown(
     limit: int | None = None,
     skip_existing: bool = False,
     force: bool = False,
+    max_pages: int | None = DEFAULT_MAX_PAGES,
     status_file: Path | None = None,
 ) -> tuple[Path, ...]:
     if limit is not None and limit < 1:
         raise ValueError("limit must be >= 1 when provided")
+    if max_pages is not None and max_pages < 1:
+        raise ValueError("max_pages must be >= 1 when provided")
 
     pdfs = iter_pdf_files(input_dir)
     if limit is not None:
@@ -150,11 +168,13 @@ def pdf_dir_to_markdown(
             continue
         if not force and skip_existing and markdown_output.exists():
             print(f"[SKIP EXISTING] {paper_id}: {markdown_output}")
+            page_count = _safe_pdf_page_count(pdf_path)
             status_index[paper_id] = _markdown_status_record(
                 paper_id=paper_id,
                 pdf_path=pdf_path,
                 markdown_output=markdown_output,
                 status="done",
+                page_count=page_count,
             )
             write_markdown_status(resolved_status_file, status_index)
             outputs.append(markdown_output)
@@ -162,6 +182,20 @@ def pdf_dir_to_markdown(
 
         print(f"[DOCLING MARKDOWN] {paper_id}")
         try:
+            page_count = get_pdf_page_count(pdf_path)
+            if max_pages is not None and page_count > max_pages:
+                status_index[paper_id] = _markdown_status_record(
+                    paper_id=paper_id,
+                    pdf_path=pdf_path,
+                    markdown_output=markdown_output,
+                    status="failed",
+                    error="pdf_page_limit_exceeded",
+                    error_description=f"PDF has {page_count} pages; max_pages={max_pages}",
+                    page_count=page_count,
+                )
+                write_markdown_status(resolved_status_file, status_index)
+                print(f"[SKIP TOO LARGE] {paper_id}: pages={page_count} max_pages={max_pages}")
+                continue
             pdf_to_markdown(pdf_path, markdown_output)
         except Exception as exc:
             status_index[paper_id] = _markdown_status_record(
@@ -171,21 +205,31 @@ def pdf_dir_to_markdown(
                 status="failed",
                 error="docling_markdown_failed",
                 error_description=f"{type(exc).__name__}: {exc}",
+                page_count=_safe_pdf_page_count(pdf_path),
             )
             write_markdown_status(resolved_status_file, status_index)
-            raise
+            print(f"[FAILED] {paper_id}: {type(exc).__name__}: {exc}")
+            continue
 
         status_index[paper_id] = _markdown_status_record(
             paper_id=paper_id,
             pdf_path=pdf_path,
             markdown_output=markdown_output,
             status="done",
+            page_count=page_count,
         )
         write_markdown_status(resolved_status_file, status_index)
         print(f"[WROTE] {markdown_output}")
         outputs.append(markdown_output)
 
     return tuple(outputs)
+
+
+def _safe_pdf_page_count(pdf_path: Path) -> int | None:
+    try:
+        return get_pdf_page_count(pdf_path)
+    except Exception:
+        return None
 
 
 def main() -> int:
