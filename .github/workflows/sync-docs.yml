@@ -1,0 +1,40 @@
+name: Sync Repository Docs to Victus Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "README.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+
+      - name: Prepare documentation payload
+        run: |
+          mkdir -p .victus-docs-sync
+          cp README.md .victus-docs-sync/README.md
+          cp -R docs .victus-docs-sync/docs
+
+      - name: Push docs to victus-docs
+        uses: cpina/github-action-push-to-another-repository@main
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.SYNC_DOCS }}
+        with:
+          source-directory: ".victus-docs-sync"
+          destination-github-username: "CarlosGebard"
+          destination-repository-name: "victus-docs"
+          target-directory: "repos/victus-processing"
+          target-branch: "main"
+          commit-message: "docs(sync): update victus-processing docs"
+          user-email: "github-actions[bot]@users.noreply.github.com"
+          user-name: "github-actions[bot]"

@@ -1,64 +1,73 @@
-# Victus Processing
+# victus-processing
 
-Paper-processing pipeline for turning scientific papers into metadata, normalized PDFs, Docling artifacts, and claim outputs.
+Local paper-processing pipeline for the Victus ecosystem.
+
+This repository turns scientific-paper inputs into metadata, normalized PDFs,
+structured PDF-processing artifacts, and claim outputs. It owns the local
+processing workflow and the `data/` artifact layout used between stages.
 
 [Español](docs/README.es.md)
 
-## What It Solves
+## Quick Start
 
-- discovers candidate papers from Semantic Scholar
-- stores canonical metadata
-- normalizes raw PDFs into pipeline inputs
-- runs Docling plus local heuristics
-- extracts claims with OpenAI models
-- exposes bridge commands for Victus registry, object storage, and events
-
-## Stack
+Prerequisites:
 
 - Python 3.12
-- uv
-- argparse CLI
-- Docling
-- OpenAI API
-- Semantic Scholar API
-- optional Victus bridge: Postgres, Redis, S3-compatible storage
+- `uv`
+- API keys for the stages you plan to run
 
-## Run Local
+Install and inspect the CLI:
 
 ```bash
 uv sync
-victus-processing --help
-victus-processing data-layout create
+uv run victus-processing --help
 ```
 
-Main flow:
+Create the local data layout:
 
 ```bash
-victus-processing metadata explore --mode broad-nutrition
-victus-processing pdfs normalize
-victus-processing pipeline run
-victus-processing claims extract --skip-existing
+uv run victus-processing data-layout create
+```
+
+Run the main local flow:
+
+```bash
+uv run victus-processing metadata explore --mode broad-nutrition
+uv run victus-processing pdfs normalize
+uv run victus-processing pdf-processing run
+uv run victus-processing claims extract --skip-existing
 ```
 
 ## Validate
 
 ```bash
-victus-processing --help
-victus-processing metadata --help
-victus-processing claims --help
-./.venv/bin/python -m pytest tests/test_cli_smoke.py -q
+uv run pytest tests/test_cli_smoke.py -q
 ```
 
-Full `pytest tests -q` currently hits stale `analytics/` tests. Track that in [roadmap](docs/roadmap.md).
+## Documentation
 
-## Docs
+- [System Context](docs/000-SYSTEM-CONTEXT.md)
+- [Architecture](docs/100-ARCHITECTURE.md)
+- [Contracts](docs/300-CONTRACTS.md)
+- [Operations](docs/200-OPERATIONS.md)
+- [CLI](docs/operations/cli.md)
+- [Runbooks](docs/operations/runbooks/)
 
-- [Setup](docs/setup.md)
-- [Architecture](docs/architecture.md)
-- [Contracts](docs/contracts.md)
-- [Operations](docs/operations.md)
-- [Security](docs/security.md)
-- [Tests](docs/tests.md)
-- [Roadmap](docs/roadmap.md)
-- [Local CLI](docs/local-cli.md)
-- [Bridge CLI](ops/scripts/bridge/README.md)
+## Responsibilities
+
+This repository owns:
+
+- local paper-processing CLI commands;
+- metadata discovery and candidate state;
+- PDF normalization into active processing inputs;
+- Docling/Gemini PDF processing artifacts;
+- OpenAI claim extraction outputs;
+- local runtime contracts under `data/`.
+
+This repository does not own:
+
+- analytics products;
+- RAG indexing or vector stores;
+- production deployment infrastructure;
+- external PDF retrieval services;
+- external API availability, billing, or model behavior.

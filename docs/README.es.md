@@ -1,6 +1,7 @@
-# Victus Processing
+# victus-processing
 
-Pipeline para convertir papers científicos en metadata, PDFs normalizados, artefactos Docling y claims.
+Pipeline local para convertir papers científicos en metadata, PDFs
+normalizados, artefactos estructurados y claims.
 
 ## Qué Resuelve
 
@@ -15,38 +16,30 @@ Pipeline para convertir papers científicos en metadata, PDFs normalizados, arte
 
 ```bash
 uv sync
-victus-processing --help
-victus-processing data-layout create
+uv run victus-processing --help
+uv run victus-processing data-layout create
 ```
 
 Flujo principal:
 
 ```bash
-victus-processing metadata explore --mode broad-nutrition
-victus-processing pdfs normalize
-victus-processing docling run
-victus-processing claims extract --skip-existing
+uv run victus-processing metadata explore --mode broad-nutrition
+uv run victus-processing pdfs normalize
+uv run victus-processing pdf-processing run
+uv run victus-processing claims extract --skip-existing
 ```
 
 ## Validar
 
 ```bash
-victus-processing --help
-victus-processing metadata --help
-victus-processing claims --help
-./.venv/bin/python -m pytest tests/test_cli_smoke.py -q
+uv run pytest tests/test_cli_smoke.py -q
 ```
-
-La suite completa aún referencia `analytics/`, que está saliendo del repo.
 
 ## Leer Más
 
-- [Setup](setup.md)
-- [Arquitectura](architecture.md)
-- [Contratos](contracts.md)
-- [Operación](operations.md)
-- [Seguridad](security.md)
-- [Tests](tests.md)
-- [Roadmap](roadmap.md)
-- [CLI local](local-cli.md)
-- [CLI bridge](../ops/scripts/bridge/README.md)
+- [Contexto del sistema](000-SYSTEM-CONTEXT.md)
+- [Arquitectura](100-ARCHITECTURE.md)
+- [Contratos](300-CONTRACTS.md)
+- [Operación](200-OPERATIONS.md)
+- [CLI local](operations/cli.md)
+- [Runbooks](operations/runbooks/)

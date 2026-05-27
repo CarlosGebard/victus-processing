@@ -12,7 +12,7 @@ ghcr.io/OWNER/REPOSITORY
 
 Replace `OWNER/REPOSITORY` with the GitHub repository slug.
 
-## Local build
+## Local Build
 
 ```bash
 docker build -t victus-processing:local .
@@ -29,7 +29,7 @@ docker run --rm \
   victus-processing:local data-layout create --dry-run
 ```
 
-## GitHub Actions publish
+## GitHub Actions Publish
 
 The workflow `.github/workflows/publish-container.yml`:
 
@@ -45,7 +45,7 @@ Required repository settings:
 
 No repository secret is required for GHCR publishing from the same repository.
 
-## Pull and run
+## Pull And Run
 
 ```bash
 docker pull ghcr.io/OWNER/REPOSITORY:main
@@ -68,11 +68,15 @@ docker pull ghcr.io/OWNER/REPOSITORY:sha-OLD_SHA
 docker run --rm ghcr.io/OWNER/REPOSITORY:sha-OLD_SHA --help
 ```
 
-If a bad package was published, remove or mark it private from the GitHub Packages UI after consumers are moved back to a known-good tag.
+If a bad package was published, remove or mark it private from the GitHub
+Packages UI after consumers are moved back to a known-good tag.
 
-## Operational notes
+## Operational Notes
 
 - Do not bake `data/` or secrets into images.
-- Provide runtime credentials through environment variables or the deployment secret manager.
-- The image defaults to `victus-processing --help`; pass CLI arguments after the image name.
-- The package currently installs all project console scripts, but the default command avoids optional bridge commands unless explicitly invoked.
+- Provide runtime credentials through environment variables or the deployment
+  secret manager.
+- The image defaults to `victus-processing --help`; pass CLI arguments after the
+  image name.
+- The package currently installs all project console scripts, but the default
+  command avoids optional bridge commands unless explicitly invoked.
