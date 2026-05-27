@@ -1,8 +1,8 @@
 ---
 id: VICTUS-PROCESSING-CLI-OPERATIONS
 title: Victus Processing CLI Operations
-status: draft
-updated_at: 2026-05-26
+status: source-of-truth
+updated_at: 2026-05-27
 owners:
   - architecture
 tags:
@@ -37,7 +37,10 @@ uv run victus-processing data-layout create
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --skip-existing
+uv run victus-processing claims extract --pattern "*/paper.processed.json" --skip-existing
 ```
+
+Compatibility note: `claims extract` still defaults to `*/*.final.json`. Use the
+explicit pattern above for current `paper.processed.json` outputs.
 
 Related: [Operations](../200-OPERATIONS.md).

@@ -1,8 +1,8 @@
 ---
 id: VICTUS-PROCESSING-PDF-PROCESSING-OPERATIONS
 title: Victus Processing PDF Processing Operations
-status: draft
-updated_at: 2026-05-26
+status: source-of-truth
+updated_at: 2026-05-27
 owners:
   - architecture
 tags:
@@ -60,6 +60,13 @@ Operational outputs:
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
 - `data/runtime/03-pdf_processing/processing_status.jsonl`;
 - `data/runtime/quotas/gemini.sqlite3`.
+
+Claims handoff:
+
+- current PDF-processing writes `paper.processed.json`;
+- `claims extract` defaults to `*/*.final.json` for compatibility;
+- use `--pattern "*/paper.processed.json"` when extracting claims from current
+  PDF-processing outputs.
 
 Quota behavior:
 

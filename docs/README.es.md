@@ -1,5 +1,7 @@
 # victus-processing
 
+Estado documental: `source-of-truth` desde `2026-05-27`.
+
 Pipeline local para convertir papers científicos en metadata, PDFs
 normalizados, artefactos estructurados y claims.
 
@@ -40,6 +42,10 @@ uv run pytest tests/test_cli_smoke.py -q
 - [Contexto del sistema](000-SYSTEM-CONTEXT.md)
 - [Arquitectura](100-ARCHITECTURE.md)
 - [Contratos](300-CONTRACTS.md)
+- [Contrato de layout](contracts/data-layout.md)
+- [Contrato de configuración y CLI](contracts/configuration-and-cli.md)
+- [Contrato de handoffs](contracts/stage-handoffs.md)
+- [Contrato de schemas](contracts/artifact-schemas.md)
 - [Operación](200-OPERATIONS.md)
 - [CLI local](operations/cli.md)
 - [Runbooks](operations/runbooks/)

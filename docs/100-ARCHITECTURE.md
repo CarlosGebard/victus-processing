@@ -1,8 +1,8 @@
 ---
 id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
-status: draft
-updated_at: 2026-05-26
+status: source-of-truth
+updated_at: 2026-05-27
 owners:
   - architecture
 related_docs:
@@ -168,7 +168,8 @@ Artifact roles:
 - `data/runtime/04-claims_by_model/`: extracted claims grouped by model.
 - `data/runtime/quotas/`: Gemini quota and cooldown state.
 
-Detailed path contracts live in [Contracts](300-CONTRACTS.md).
+Detailed path, handoff, configuration, CLI, and schema contracts live in
+[Contracts](300-CONTRACTS.md).
 
 ## 6. Quality Attributes
 

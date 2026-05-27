@@ -1,8 +1,8 @@
 ---
 id: VICTUS-PROCESSING-SYSTEM-CONTEXT
 title: Victus Processing System Context
-status: draft
-updated_at: 2026-05-26
+status: source-of-truth
+updated_at: 2026-05-27
 owners:
   - architecture
 ---
@@ -65,6 +65,8 @@ Primary hubs:
   troubleshooting, and rollback notes.
 - [Contracts](300-CONTRACTS.md): storage paths, environment variables, data layout,
   and identity contracts.
+- [Contract details](contracts/): source-of-truth contracts for data layout,
+  configuration/CLI, stage handoffs, and artifact schemas.
 - [CLI operations](operations/cli.md): command groups and common command flow.
 - [PDF processing operations](operations/pdf-processing.md): runtime details
   specific to PDF-processing flow.

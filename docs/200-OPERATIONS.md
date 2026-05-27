@@ -1,8 +1,8 @@
 ---
 id: VICTUS-PROCESSING-OPERATIONS
 title: Victus Processing Operations
-status: draft
-updated_at: 2026-05-26
+status: source-of-truth
+updated_at: 2026-05-27
 owners:
   - architecture
 related_docs:
@@ -62,7 +62,7 @@ Run the main local flow:
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --skip-existing
+uv run victus-processing claims extract --pattern "*/paper.processed.json" --skip-existing
 ```
 
 Run a single DOI metadata fetch:
@@ -112,6 +112,10 @@ Operational inspection sources:
 - `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
 - `data/runtime/quotas/gemini.sqlite3`.
+
+Current compatibility note: the claims CLI default pattern is `*/*.final.json`.
+When consuming current PDF-processing outputs, pass
+`--pattern "*/paper.processed.json"`.
 
 ## 6. Failure and Recovery
 
