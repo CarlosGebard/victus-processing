@@ -33,6 +33,8 @@ or stage handoffs.
   bibliography, PDF normalization, PDF processing, and claims.
 - [Artifact Schemas](contracts/artifact-schemas.md): durable JSON/JSONL shapes
   consumed or produced by the current pipeline.
+- [Claims Schema](contracts/claims-schema.md): required claim fields, field
+  semantics, allowed values, and validation expectations.
 
 ## Contract Scope
 
@@ -46,6 +48,7 @@ Contracts cover:
 - config and environment resolution that affects paths or models;
 - public CLI command names used by operators and agents;
 - schema-level expectations for current durable artifacts.
+- claim extraction schema and field-level semantics.
 
 Contracts do not cover:
 

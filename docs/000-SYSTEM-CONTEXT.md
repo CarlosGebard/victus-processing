@@ -66,7 +66,7 @@ Primary hubs:
 - [Contracts](300-CONTRACTS.md): storage paths, environment variables, data layout,
   and identity contracts.
 - [Contract details](contracts/): source-of-truth contracts for data layout,
-  configuration/CLI, stage handoffs, and artifact schemas.
+  configuration/CLI, stage handoffs, artifact schemas, and claims schema.
 - [CLI operations](operations/cli.md): command groups and common command flow.
 - [PDF processing operations](operations/pdf-processing.md): runtime details
   specific to PDF-processing flow.

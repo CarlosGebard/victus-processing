@@ -46,6 +46,7 @@ uv run pytest tests/test_cli_smoke.py -q
 - [Contrato de configuración y CLI](contracts/configuration-and-cli.md)
 - [Contrato de handoffs](contracts/stage-handoffs.md)
 - [Contrato de schemas](contracts/artifact-schemas.md)
+- [Contrato de claims](contracts/claims-schema.md)
 - [Operación](200-OPERATIONS.md)
 - [CLI local](operations/cli.md)
 - [Runbooks](operations/runbooks/)

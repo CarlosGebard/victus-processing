@@ -121,43 +121,8 @@ Claims output is a JSON object:
 }
 ```
 
-Each claim object must include these keys:
-
-```text
-claim_text
-claim_family
-support_section
-population
-subgroup
-intervention_or_exposure
-comparator
-arm
-comparison_type
-outcome
-direction
-units
-baseline_value
-followup_value
-within_group_change
-between_group_difference
-dose
-duration
-timepoint
-study_design
-sample_size
-keywords
-statistics
-evidence_span
-confidence
-```
-
-Required value constraints:
-
-- `claim_text`, `claim_family`, `support_section`, and `evidence_span` are
-  non-empty strings.
-- `confidence` is numeric.
-- `keywords` is a list.
-- `statistics` is an object.
+The canonical claim object schema, field semantics, allowed values, and
+validation rules live in [Claims Schema](claims-schema.md).
 
 ## 7. Registry Records
 
@@ -188,3 +153,4 @@ DOI and document ID.
 - [Contracts](../300-CONTRACTS.md)
 - [Data Layout](data-layout.md)
 - [Stage Handoffs](stage-handoffs.md)
+- [Claims Schema](claims-schema.md)
