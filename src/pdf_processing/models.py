@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 @dataclass(frozen=True)
@@ -15,8 +15,9 @@ class PdfProcessingConfig:
     prompt_first_batch: Path
     prompt_continuation_batch: Path
     workers: int = 1
-    markdown_batch_chars: int = 10000
-    markdown_batch_hard_limit_chars: int = 25000
+    markdown_batch_chars: int = 6000
+    markdown_batch_soft_limit_chars: int = 9000
+    markdown_batch_hard_limit_chars: int = 14000
     max_batches: int | None = None
     requests_per_minute: int = 15
     requests_per_day: int = 500
@@ -32,6 +33,10 @@ class MarkdownBatch:
     text: str
     start_char: int
     end_char: int
+    previous_section_path: tuple[str, ...] = ()
+    last_heading: str | None = None
+    last_300_chars: str | None = None
+    oversized_unit: bool = False
 
 
 class JsonMetadata(BaseModel):
@@ -55,9 +60,26 @@ class BlockQuality(BaseModel):
 
 
 class SectionRegistryEntry(BaseModel):
-    title: str
+    title: str = ""
     type: str = "unknown"
+    original_title: str | None = None
+    canonical_title: str | None = None
+    section_type: str | None = None
     parent: str | None = None
+
+    @model_validator(mode="after")
+    def normalize_registry_fields(self) -> SectionRegistryEntry:
+        if not self.title:
+            self.title = self.canonical_title or self.original_title or ""
+        if self.section_type and self.type == "unknown":
+            self.type = self.section_type
+        if self.original_title is None:
+            self.original_title = self.title
+        if self.canonical_title is None:
+            self.canonical_title = self.title
+        if self.section_type is None:
+            self.section_type = self.type
+        return self
 
 
 class JsonBlock(BaseModel):

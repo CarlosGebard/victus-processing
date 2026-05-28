@@ -2,12 +2,13 @@
 id: VICTUS-PROCESSING-ARTIFACT-SCHEMAS-CONTRACT
 title: Victus Processing Artifact Schemas Contract
 status: source-of-truth
-updated_at: 2026-05-27
+updated_at: 2026-05-28
 owners:
   - architecture
 related_components:
   - src.pdf_processing.models
   - src.pdf_processing.pipeline
+  - src.pdf_processing.processed_paper_contract
   - src.claims.extraction
   - src.workspace.artifacts
 related_docs:
@@ -57,7 +58,7 @@ batch_end: object
 batch_warnings: object
 ```
 
-Block objects contain:
+Batch block objects contain:
 
 ```text
 local_id?: string
@@ -67,6 +68,21 @@ section_type: string
 content_kind: string
 text: string
 ```
+
+`section_registry` and `updated_section_registry` accept the current prompt
+contract:
+
+```text
+original_title?: string
+canonical_title?: string
+section_type?: string
+parent?: string | null
+```
+
+For compatibility, the pipeline also accepts legacy `title` and `type` fields.
+When batch outputs are normalized internally, `title` is derived from
+`canonical_title`, then `original_title`, then legacy `title`; `type` is derived
+from `section_type`, then legacy `type`.
 
 Raw batch files are written as debug envelopes:
 
@@ -90,6 +106,81 @@ data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
 It is produced by merging validated batch outputs. Claims extraction expects a
 JSON object with a top-level `sections` list. When present, `paper`, `title`,
 `paper_title`, and `trace` are used as context for claims prompts.
+
+Final `blocks` are normalized by the processed-paper contract before the final
+artifact is written. Each final block must include:
+
+```text
+block_id: "{paper_hash}:b{order}"
+content_hash: sha256(normalized_text)
+order: integer
+section_path: list[string]
+section_type: string
+content_kind: string
+text: string
+retrieval_exclude: boolean
+```
+
+`block_id` is the operational block identity. It is deterministic within a
+processed paper and is recomputed after final block repair and ordering.
+
+`content_hash` is the real content identity. It is computed from normalized
+block text using:
+
+```text
+Unicode NFKC normalization
+ligature cleanup
+lowercase
+whitespace collapse
+trim
+sha256(UTF-8 bytes)
+```
+
+Final blocks must not rely on `global_block_id` or `global_id`; those fields are
+not part of the current final block contract.
+
+Final `section_type` values must be in the prompt-defined canonical set:
+
+```text
+front_matter
+abstract
+background
+introduction
+related_work
+methods
+dataset
+evaluation
+experiments
+results
+discussion
+limitations
+future_work
+conclusion
+clinical_guideline
+recommendations
+diagnostic_criteria
+treatment
+prevention
+statistical_analysis
+appendix
+supplementary
+references
+acknowledgements
+funding
+disclosure
+ethics
+unknown
+```
+
+The post-merge contract layer may normalize known aliases into this set, for
+example `frontmatter` to `front_matter`, `data_availability` to `dataset`,
+`publisher_note` to `disclosure`, and `author_contributions` to
+`acknowledgements`.
+
+Final block repair joins adjacent blocks in the same section when a block ends
+with an obvious incomplete ending (`and`, `of`, `with`, `,`, `;`, `(`) or lacks
+terminal punctuation. Frontmatter and publisher noise are not deleted from the
+artifact; retrieval-only filtering is expressed with `retrieval_exclude: true`.
 
 ## 5. Status JSONL
 

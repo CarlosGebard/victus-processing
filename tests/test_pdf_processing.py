@@ -11,52 +11,213 @@ from src.pdf_processing.gemini import load_gemini_api_keys
 from src.pdf_processing.markdown import load_markdown_status_index, pdf_dir_to_markdown
 from src.pdf_processing.merge import merge_batch_outputs
 from src.pdf_processing.models import PdfProcessingConfig
+from src.pdf_processing.models import MarkdownBatchOutput
+from src.pdf_processing.processed_paper_contract import enforce_processed_paper_contract
 from src.pdf_processing.pipeline import _load_or_create_markdown
 from src.pdf_processing.quota import GeminiKeyScheduler, SQLiteQuotaRepository
 
 
-def test_build_markdown_batches_cuts_before_level_two_heading() -> None:
+def test_build_markdown_batches_groups_structural_units_by_soft_limit() -> None:
     markdown = "\n\n".join(
         [
             "# Paper",
-            "## Section 1\n" + ("a" * 120),
-            "## Section 2\n" + ("b" * 120),
-            "## Section 3\n" + ("c" * 40),
+            "## Section 1",
+            "a" * 80,
+            "## Section 2",
+            "b" * 80,
+            "## Section 3",
+            "c" * 40,
         ]
     )
 
-    batches = build_markdown_batches(markdown, min_chars=100, hard_limit_chars=180)
+    batches = build_markdown_batches(markdown, min_chars=90, soft_limit_chars=120, hard_limit_chars=180)
 
     assert len(batches) == 3
     assert batches[0].index == 1
-    assert batches[1].start_char > batches[0].end_char
+    assert batches[1].start_char >= batches[0].end_char
     assert "## Section 2" not in batches[0].text
     assert batches[1].text.startswith("## Section 2")
+    assert batches[1].previous_section_path == ("Paper", "Section 1")
+    assert batches[1].last_300_chars == batches[0].text[-300:]
 
 
-def test_build_markdown_batches_falls_back_to_block_cut_when_heading_is_missing() -> None:
+def test_build_markdown_batches_opens_batch_with_heading_after_half_target() -> None:
     markdown = "\n\n".join(
         [
             "# Paper",
-            "a" * 80,
-            "b" * 80,
-            "c" * 80,
-            "d" * 20,
+            "a" * 60,
+            "## Results",
+            "b" * 60,
         ]
     )
 
-    batches = build_markdown_batches(markdown, min_chars=100, hard_limit_chars=180)
+    batches = build_markdown_batches(markdown, min_chars=100, soft_limit_chars=140, hard_limit_chars=200)
 
     assert len(batches) == 2
-    assert batches[0].text.endswith("b" * 80)
-    assert batches[1].text.startswith("c" * 80)
+    assert not batches[0].text.endswith("## Results")
+    assert batches[1].text.startswith("## Results")
 
 
-def test_build_markdown_batches_raises_when_no_safe_cut_exists_before_hard_limit() -> None:
-    markdown = "a" * 250
+def test_build_markdown_batches_moves_trailing_heading_when_hard_limit_closes() -> None:
+    markdown = "\n\n".join(
+        [
+            "# Paper",
+            "a" * 50,
+            "## " + ("Results " * 12),
+            "b" * 20,
+        ]
+    )
+
+    batches = build_markdown_batches(markdown, min_chars=130, soft_limit_chars=135, hard_limit_chars=140)
+
+    assert len(batches) == 2
+    assert not batches[0].text.endswith("Results ")
+    assert batches[1].text.startswith("## Results")
+
+
+def test_build_markdown_batches_preserves_complete_table_and_list_units() -> None:
+    markdown = "\n\n".join(
+        [
+            "# Paper",
+            "Intro paragraph " + ("a" * 70),
+            "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |",
+            "- item one\n- item two\n- item three",
+            "Final paragraph " + ("z" * 20),
+        ]
+    )
+
+    batches = build_markdown_batches(markdown, min_chars=80, soft_limit_chars=120, hard_limit_chars=180)
+
+    assert len(batches) >= 2
+    all_batch_text = "\n---BATCH---\n".join(batch.text for batch in batches)
+    assert "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |" in all_batch_text
+    assert "- item one\n- item two\n- item three" in all_batch_text
+    assert not any(batch.text.endswith("| A | B |") for batch in batches)
+    assert not any(batch.text.endswith("- item one") for batch in batches)
+
+
+def test_build_markdown_batches_splits_oversized_paragraph_by_safe_sub_rules() -> None:
+    markdown = "# Paper\n\n" + "\n".join(["a" * 40 for _ in range(8)])
+
+    batches = build_markdown_batches(markdown, min_chars=70, soft_limit_chars=100, hard_limit_chars=140)
+
+    assert len(batches) >= 3
+    assert any(batch.oversized_unit for batch in batches)
+    assert all(len(batch.text) <= 140 for batch in batches)
+
+
+def test_build_markdown_batches_raises_for_oversized_table() -> None:
+    markdown = "# Paper\n\n" + "\n".join(["| " + ("a" * 80) + " |" for _ in range(4)])
 
     with pytest.raises(MarkdownBatchingError):
-        build_markdown_batches(markdown, min_chars=100, hard_limit_chars=180)
+        build_markdown_batches(markdown, min_chars=70, soft_limit_chars=100, hard_limit_chars=140)
+
+
+def test_enforce_processed_paper_contract_repairs_ids_sections_frontmatter_and_splits() -> None:
+    payload = {
+        "source_pdf": "/tmp/paper-a.pdf",
+        "blocks": [
+            {
+                "block_id": "b2",
+                "order": 2,
+                "section_path": ["2. Results"],
+                "section_title": "2. Results",
+                "section_type": "results",
+                "content_kind": "paragraph",
+                "text": "The intervention improved glucose and",
+            },
+            {
+                "block_id": "b3",
+                "order": 3,
+                "section_path": ["2. Results"],
+                "section_title": "Results",
+                "section_type": "results",
+                "content_kind": "paragraph",
+                "text": "reduced insulin resistance.",
+            },
+            {
+                "block_id": "b1",
+                "order": 1,
+                "section_path": ["Frontmatter"],
+                "section_title": "Open Access",
+                "section_type": "frontmatter",
+                "content_kind": "paragraph",
+                "text": "Open Access article under copyright notice.",
+            },
+        ],
+    }
+
+    normalized = enforce_processed_paper_contract(payload)
+
+    assert [block["order"] for block in normalized["blocks"]] == [0, 1]
+    assert normalized["blocks"][0]["retrieval_exclude"] is True
+    assert normalized["blocks"][0]["block_id"] == "paper-a:b0"
+    assert len(normalized["blocks"][1]["content_hash"]) == 64
+    assert normalized["blocks"][1]["text"] == "The intervention improved glucose and reduced insulin resistance."
+    assert normalized["blocks"][1]["section_title"] == "Results"
+    assert normalized["blocks"][1]["section_slug"] == "results"
+    assert set(normalized["blocks"][1]).issuperset(
+        {
+            "block_id",
+            "content_hash",
+            "section_path",
+            "section_type",
+            "content_kind",
+            "text",
+            "retrieval_exclude",
+        }
+    )
+
+
+def test_enforce_processed_paper_contract_patches_section_ontology() -> None:
+    payload = {
+        "source_pdf": "paper.pdf",
+        "blocks": [
+            {
+                "block_id": "b1",
+                "order": 0,
+                "section_path": ["Statistical analysis"],
+                "section_title": "Statistical analysis",
+                "section_type": "methods",
+                "content_kind": "paragraph",
+                "text": "Analyses used mixed models.",
+            },
+            {
+                "block_id": "b2",
+                "order": 1,
+                "section_path": ["Data availability"],
+                "section_title": "Data availability",
+                "section_type": "unknown",
+                "content_kind": "paragraph",
+                "text": "Data are available from the repository.",
+            },
+        ],
+    }
+
+    normalized = enforce_processed_paper_contract(payload)
+
+    assert normalized["blocks"][0]["section_type"] == "statistical_analysis"
+    assert normalized["blocks"][1]["section_type"] == "dataset"
+    assert normalized["blocks"][1]["retrieval_exclude"] is True
+
+
+def test_markdown_batch_output_accepts_new_section_registry_contract_without_slug() -> None:
+    parsed = MarkdownBatchOutput.model_validate(
+        {
+            "section_registry": [
+                {
+                    "original_title": "1. INTRODUCTION",
+                    "canonical_title": "Introduction",
+                    "section_type": "introduction",
+                    "parent": None,
+                }
+            ],
+            "blocks": [{"section_path": ["Introduction"], "section_type": "introduction", "content_kind": "paragraph", "text": "Text."}],
+        }
+    ).as_clean_dict()
+
+    assert parsed["section_registry"][0]["title"] == "Introduction"
+    assert parsed["section_registry"][0]["type"] == "introduction"
 
 
 def test_merge_uses_first_batch_metadata_dedupes_and_preserves_order(tmp_path) -> None:
@@ -120,10 +281,15 @@ def test_merge_uses_first_batch_metadata_dedupes_and_preserves_order(tmp_path) -
         {"order": 0, "title": "Intro", "type": "introduction", "parent": None},
         {"order": 1, "title": "Methods", "type": "methods", "parent": None},
     ]
-    assert merged["section_registry"] == [
-        {"title": "Intro", "type": "introduction", "parent": None},
-        {"title": "Methods", "type": "methods", "parent": None},
-    ]
+    assert merged["section_registry"][0] == {
+        "title": "Intro",
+        "type": "introduction",
+        "original_title": "Intro",
+        "canonical_title": "Intro",
+        "section_type": "introduction",
+        "parent": None,
+    }
+    assert merged["section_registry"][1]["title"] == "Methods"
     assert merged["blocks"] == [
         {
             "block_id": "intro-1",

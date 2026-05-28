@@ -100,6 +100,8 @@ def merge_batch_outputs(
         "processing": {
             "model": config.model,
             "markdown_batch_chars": config.markdown_batch_chars,
+            "markdown_batch_soft_limit_chars": config.markdown_batch_soft_limit_chars,
+            "markdown_batch_hard_limit_chars": config.markdown_batch_hard_limit_chars,
             "total_batches": len(batches),
             "created_at": datetime.now(UTC).isoformat(),
         },
@@ -155,10 +157,15 @@ def _merge_section_registry(current: list[dict[str, Any]], incoming: Any) -> lis
     for item in incoming:
         if not isinstance(item, dict):
             continue
+        title = str(item.get("title") or item.get("canonical_title") or item.get("original_title") or "").strip()
+        section_type = str(item.get("type") or item.get("section_type") or "unknown").strip()
         normalized = remove_recitation_separator(
             {
-                "title": str(item.get("title") or "").strip(),
-                "type": str(item.get("type") or "unknown").strip(),
+                "title": title,
+                "type": section_type,
+                "original_title": item.get("original_title") or title,
+                "canonical_title": item.get("canonical_title") or title,
+                "section_type": section_type,
                 "parent": item.get("parent"),
             }
         )

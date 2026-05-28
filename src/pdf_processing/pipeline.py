@@ -11,6 +11,7 @@ from src.pdf_processing.gemini import GeminiClient, load_gemini_api_keys
 from src.pdf_processing.markdown import pdf_to_markdown
 from src.pdf_processing.merge import merge_batch_outputs
 from src.pdf_processing.models import PdfProcessingConfig
+from src.pdf_processing.processed_paper_contract import enforce_processed_paper_contract
 from src.pdf_processing.quota import GeminiKeyScheduler, SQLiteQuotaRepository
 from src.pdf_processing.status import append_processing_status, load_processing_status_index, write_processing_status_index
 
@@ -30,8 +31,9 @@ def load_pdf_processing_config() -> PdfProcessingConfig:
             cfg.get("prompt_continuation_batch"),
             ctx.ROOT_DIR / "src/prompts/md_to_json_next.md",
         ),
-        markdown_batch_chars=int(cfg.get("markdown_batch_chars", 10000)),
-        markdown_batch_hard_limit_chars=int(cfg.get("markdown_batch_hard_limit_chars", 25000)),
+        markdown_batch_chars=int(cfg.get("markdown_batch_chars", 6000)),
+        markdown_batch_soft_limit_chars=int(cfg.get("markdown_batch_soft_limit_chars", 9000)),
+        markdown_batch_hard_limit_chars=int(cfg.get("markdown_batch_hard_limit_chars", 14000)),
         max_batches=int(cfg["max_batches"]) if cfg.get("max_batches") is not None else None,
         requests_per_minute=int(cfg.get("requests_per_minute", 15)),
         requests_per_day=int(cfg.get("requests_per_day", 500)),
@@ -167,6 +169,7 @@ async def run_pdf_processing_async(
             batches = build_markdown_batches(
                 markdown,
                 min_chars=resolved_config.markdown_batch_chars,
+                soft_limit_chars=resolved_config.markdown_batch_soft_limit_chars,
                 hard_limit_chars=resolved_config.markdown_batch_hard_limit_chars,
             )
         except MarkdownBatchingError as exc:
@@ -226,6 +229,7 @@ async def run_pdf_processing_async(
             batches=results,
             config=resolved_config,
         )
+        merged = enforce_processed_paper_contract(merged)
         _write_json(final_output, merged)
         append_processing_status(
             status_file,
@@ -264,9 +268,14 @@ def _merge_section_registry(
     for item in incoming:
         if not isinstance(item, dict):
             continue
+        title = str(item.get("title") or item.get("canonical_title") or item.get("original_title") or "").strip()
+        section_type = str(item.get("type") or item.get("section_type") or "unknown").strip()
         normalized = {
-            "title": str(item.get("title") or "").strip(),
-            "type": str(item.get("type") or "unknown").strip(),
+            "title": title,
+            "type": section_type,
+            "original_title": item.get("original_title") or title,
+            "canonical_title": item.get("canonical_title") or title,
+            "section_type": section_type,
             "parent": item.get("parent"),
         }
         if not normalized["title"]:

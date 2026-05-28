@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT
 title: Victus Processing Stage Handoffs Contract
 status: source-of-truth
-updated_at: 2026-05-27
+updated_at: 2026-05-28
 owners:
   - architecture
 related_components:
@@ -96,7 +96,13 @@ data/inputs/seeds/*.jsonl or --doi
 - `paper.md` is generated with Docling and may be reused unless forced.
 - Raw batch files must be written before final merge so partial model output can
   be inspected.
-- Final success requires a merged structured JSON file and a done status.
+- Section registry state is accumulated across batches. Batch 1 contributes
+  `section_registry`; continuation batches contribute `updated_section_registry`.
+- Final success requires a merged structured JSON file, processed-paper contract
+  enforcement, and a done status.
+- Final `paper.processed.json` blocks must use `block_id` in
+  `{paper_hash}:b{order}` format and `content_hash` for normalized text
+  identity.
 
 ### Claims
 

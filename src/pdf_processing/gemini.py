@@ -30,12 +30,19 @@ def load_gemini_api_keys(env: dict[str, str] | None = None) -> dict[str, str]:
 
 
 def build_gemini_markdown_payload(prompt: str, batch: MarkdownBatch) -> dict[str, Any]:
+    context = {
+        "previous_section_path": list(batch.previous_section_path),
+        "last_heading": batch.last_heading,
+        "last_300_chars": batch.last_300_chars,
+        "oversized_unit": batch.oversized_unit,
+    }
     return {
         "contents": [
             {
                 "role": "user",
                 "parts": [
                     {"text": prompt},
+                    {"text": "\n\n# BATCH STRUCTURAL CONTEXT\n\n" + json.dumps(context, ensure_ascii=False, indent=2)},
                     {"text": f"\n\n# MARKDOWN BATCH {batch.index}\n\n{batch.text}"},
                 ],
             }

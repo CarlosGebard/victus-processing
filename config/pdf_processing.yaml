@@ -5,8 +5,9 @@ pdf_processing:
   workers: 1
   prompt_first_batch: "src/prompts/md_to_json_first.md"
   prompt_continuation_batch: "src/prompts/md_to_json_next.md"
-  markdown_batch_chars: 10000
-  markdown_batch_hard_limit_chars: 25000
+  markdown_batch_chars: 6000
+  markdown_batch_soft_limit_chars: 9000
+  markdown_batch_hard_limit_chars: 14000
   max_batches: null
   requests_per_minute: 15
   requests_per_day: 500
