@@ -37,10 +37,9 @@ uv run victus-processing data-layout create
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --pattern "*/paper.processed.json" --skip-existing
+uv run victus-processing claims extract --pattern "*/paper.final.json" --skip-existing
 ```
 
-Compatibility note: `claims extract` still defaults to `*/*.final.json`. Use the
-explicit pattern above for current `paper.processed.json` outputs.
+Compatibility note: `claims extract` defaults to `*/*.final.json`.
 
 Related: [Operations](../200-OPERATIONS.md).

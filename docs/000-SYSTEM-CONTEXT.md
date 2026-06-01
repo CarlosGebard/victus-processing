@@ -1,10 +1,8 @@
 ---
 id: VICTUS-PROCESSING-SYSTEM-CONTEXT
 title: Victus Processing System Context
-status: source-of-truth
+status: active
 updated_at: 2026-05-27
-owners:
-  - architecture
 ---
 
 # System Context
@@ -43,8 +41,8 @@ This repository owns:
 - local `data/` runtime layout;
 - metadata discovery and candidate state;
 - PDF normalization into active processing inputs;
-- Docling/Gemini PDF-processing artifacts;
-- OpenAI claim extraction outputs;
+- Docling/LLM PDF-processing artifacts;
+- LLM claim extraction outputs;
 - local contracts for artifacts, paths, and stage handoffs.
 
 This repository does not own:

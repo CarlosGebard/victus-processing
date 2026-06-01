@@ -6,7 +6,7 @@ updated_at: 2026-05-27
 owners:
   - architecture
 related_components:
-  - src.claims.extraction
+  - src.application.claims.extraction
   - src.prompts.claims
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
@@ -40,7 +40,7 @@ Covered:
 Not covered:
 
 - full paper-processing schemas;
-- OpenAI API response envelopes;
+- provider API response envelopes;
 - downstream analytics tables;
 - ranking, retrieval, or scoring systems outside this repository.
 

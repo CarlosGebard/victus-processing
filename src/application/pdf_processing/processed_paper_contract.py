@@ -9,32 +9,29 @@ from typing import Any
 CANONICAL_SECTION_TYPES = {
     "front_matter",
     "abstract",
-    "background",
     "introduction",
     "related_work",
     "methods",
-    "dataset",
-    "evaluation",
-    "experiments",
     "results",
     "discussion",
-    "limitations",
-    "future_work",
     "conclusion",
-    "clinical_guideline",
-    "recommendations",
-    "diagnostic_criteria",
-    "treatment",
-    "prevention",
-    "statistical_analysis",
+    "references",
     "appendix",
     "supplementary",
-    "references",
     "acknowledgements",
     "funding",
     "disclosure",
     "ethics",
     "unknown",
+}
+
+FINAL_SECTION_TYPES = {
+    "abstract",
+    "methods",
+    "results",
+    "discussion",
+    "conclusion",
+    "supplementary",
 }
 
 SECTION_TYPE_ALIASES = {
@@ -43,9 +40,6 @@ SECTION_TYPE_ALIASES = {
     "material_and_methods": "methods",
     "materials_and_methods": "methods",
     "method": "methods",
-    "statistical_methods": "statistical_analysis",
-    "statistical_analyses": "statistical_analysis",
-    "data_availability": "dataset",
     "publisher_note": "disclosure",
     "author_contributions": "acknowledgements",
     "abbreviations": "supplementary",
@@ -58,23 +52,7 @@ MIN_BLOCK_FIELDS = {
     "section_type",
     "content_kind",
     "text",
-    "retrieval_exclude",
 }
-
-FRONTMATTER_PATTERNS = (
-    "open access",
-    "affiliation",
-    "affiliations",
-    "correspondence",
-    "copyright",
-    "publisher note",
-    "received:",
-    "accepted:",
-    "available online",
-    "http://",
-    "https://",
-    "repository",
-)
 
 BAD_ENDINGS = ("and", "of", "with", ",", ";", "(")
 
@@ -98,12 +76,35 @@ def validate_processed_paper_contract(payload: dict[str, Any]) -> None:
             raise ValueError(f"Processed paper block {index} missing fields: {sorted(missing)}")
         if not isinstance(block["section_path"], list):
             raise ValueError(f"Processed paper block {index} section_path must be a list")
-        if not isinstance(block["retrieval_exclude"], bool):
-            raise ValueError(f"Processed paper block {index} retrieval_exclude must be boolean")
         if not str(block["text"]).strip():
             raise ValueError(f"Processed paper block {index} text must be non-empty")
         if block["section_type"] not in CANONICAL_SECTION_TYPES:
             raise ValueError(f"Processed paper block {index} invalid section_type: {block['section_type']}")
+
+
+def build_final_paper(payload: dict[str, Any]) -> dict[str, Any]:
+    final = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"section_registry", "batch_warnings", "processing"}
+    }
+    blocks = []
+    for block in payload.get("blocks") or []:
+        if not isinstance(block, dict) or block.get("section_type") not in FINAL_SECTION_TYPES:
+            continue
+        cleaned = dict(block)
+        cleaned.pop("retrieval_exclude", None)
+        quality = cleaned.get("quality")
+        if isinstance(quality, dict):
+            cleaned["quality"] = {
+                key: value for key, value in quality.items() if key not in {"is_truncated", "is_duplicate"}
+            }
+            if not cleaned["quality"]:
+                cleaned.pop("quality", None)
+        blocks.append(cleaned)
+    final["blocks"] = [_renumber_block(block, index) for index, block in enumerate(blocks)]
+    final["sections"] = _sections_from_final_blocks(final["blocks"])
+    return final
 
 
 def _normalize_block(block: dict[str, Any], paper_hash: str, index: int) -> dict[str, Any]:
@@ -111,7 +112,7 @@ def _normalize_block(block: dict[str, Any], paper_hash: str, index: int) -> dict
     section_title = _canonical_section_title(block.get("section_title") or (section_path[-1] if section_path else None))
     section_type = _canonical_section_type(block.get("section_type"), section_title)
     text = _clean_text(block.get("text"))
-    return {
+    normalized = {
         **block,
         "block_id": f"{paper_hash}:b{index}",
         "content_hash": content_hash(text),
@@ -122,8 +123,36 @@ def _normalize_block(block: dict[str, Any], paper_hash: str, index: int) -> dict
         "section_type": section_type,
         "content_kind": str(block.get("content_kind") or "paragraph").strip() or "paragraph",
         "text": text,
-        "retrieval_exclude": bool(block.get("retrieval_exclude")) or _is_frontmatter_noise(block, section_title),
     }
+    normalized.pop("retrieval_exclude", None)
+    return normalized
+
+
+def _renumber_block(block: dict[str, Any], index: int) -> dict[str, Any]:
+    renumbered = dict(block)
+    block_id = str(renumbered.get("block_id") or "")
+    prefix = block_id.rsplit(":b", 1)[0] if ":b" in block_id else "paper"
+    renumbered["block_id"] = f"{prefix}:b{index}"
+    renumbered["order"] = index
+    return renumbered
+
+
+def _sections_from_final_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sections: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for block in blocks:
+        key = (str(block.get("section_title") or ""), str(block.get("section_type") or "unknown"))
+        if key in seen:
+            continue
+        seen.add(key)
+        sections.append(
+            {
+                "order": len(sections),
+                "title": block.get("section_title"),
+                "type": block.get("section_type") or "unknown",
+            }
+        )
+    return sections
 
 
 def content_hash(text: Any) -> str:
@@ -200,23 +229,13 @@ def _canonical_section_type(value: Any, section_title: str) -> str:
     title = section_title.lower()
     if "ethic" in title:
         return "ethics"
-    if "data availability" in title or "availability of data" in title or "repository" in title:
-        return "dataset"
     if "author contribution" in title or "contributions" in title:
         return "acknowledgements"
     if "publisher note" in title:
         return "disclosure"
     if "abbreviation" in title:
         return "supplementary"
-    if "statistical analysis" in title or title == "statistics":
-        return "statistical_analysis"
     return current if current in CANONICAL_SECTION_TYPES else "unknown"
-
-
-def _is_frontmatter_noise(block: dict[str, Any], section_title: str) -> bool:
-    haystack = f"{section_title} {_clean_text(block.get('text'))}".lower()
-    section_type = str(block.get("section_type") or "").strip().lower()
-    return section_type in {"metadata", "frontmatter", "front_matter"} or any(pattern in haystack for pattern in FRONTMATTER_PATTERNS)
 
 
 def _section_key(block: dict[str, Any]) -> tuple[str, str]:

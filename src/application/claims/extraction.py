@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from openai import OpenAI
-
 from src.workspace.config import get_config, get_pipeline_paths
 from src.workspace.artifacts import record_claims_run
+from src.application.ports.llm import LLMClient, LLMRequest
 from src.prompts import build_claims_prompt
 
 
@@ -389,7 +387,7 @@ def build_claims_preview(
 
 
 def run_claim_extraction_for_file(
-    client: OpenAI,
+    client: LLMClient,
     input_path: Path,
     output_path: Path,
     model: str,
@@ -411,19 +409,23 @@ def run_claim_extraction_for_file(
         available_sections=", ".join(available_sections_list) or "none",
     )
 
-    response = client.responses.create(
-        model=model,
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": prompt}
-                ],
-            }
-        ],
+    response = client.complete(
+        LLMRequest(
+            operation="claims.extract",
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            temperature=temperature,
+            response_format={"type": "json_object"},
+            metadata={"source_final_json": str(input_path)},
+        )
     )
 
-    raw_text = extract_text_output(response)
+    raw_text = response.text
 
     try:
         parsed = json.loads(raw_text)
@@ -480,11 +482,8 @@ def run_claim_extraction_flow(
     review_callback: Callable[[Path, dict[str, Any], Path], bool] | None = None,
     auto_approve_max_tokens: int | None = None,
     skip_existing: bool = False,
+    llm_client: LLMClient | None = None,
 ) -> tuple[int, int, int]:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set.")
-
     resolved_input = input_path.expanduser().resolve()
     resolved_output = output.expanduser().resolve()
     files = collect_input_files(resolved_input, pattern)
@@ -492,7 +491,9 @@ def run_claim_extraction_flow(
         print(f"No input files found in {resolved_input} with pattern '{pattern}'.")
         return 0, 0, 0
 
-    client = OpenAI(api_key=api_key)
+    if llm_client is None:
+        raise RuntimeError("LLM client is required.")
+    client = llm_client
     processed = 0
     overwritten = 0
     failed = 0
@@ -572,29 +573,7 @@ def run_claim_extraction_flow(
 
 
 def main() -> int:
-    args = parse_args()
-    try:
-        processed, overwritten, failed = run_claim_extraction_flow(
-            input_path=args.input,
-            output=args.output,
-            model=args.model,
-            max_claims=args.max_claims,
-            temperature=args.temperature,
-            pattern=args.pattern,
-            auto_approve_max_tokens=(
-                AUTO_APPROVE_MAX_TOKENS if args.auto_approve_under_7000_tokens else None
-            ),
-            skip_existing=args.skip_existing,
-        )
-    except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-
-    print("\nResumen llm_to_claim")
-    print(f"- Procesados: {processed}")
-    print(f"- Overwrite:  {overwritten}")
-    print(f"- Fallidos:   {failed}")
-    return 0
+    raise SystemExit("Use the victus-processing CLI so the LLM client can be injected.")
 
 
 if __name__ == "__main__":

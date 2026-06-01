@@ -6,10 +6,12 @@ updated_at: 2026-05-28
 owners:
   - architecture
 related_components:
-  - src.metadata
-  - src.pdf_extraction
-  - src.pdf_processing
-  - src.claims
+  - src.application.metadata
+  - src.application.pdf_extraction
+  - src.application.pdf_processing
+  - src.application.claims
+  - src.application.ports.llm
+  - src.infrastructure.llm
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
 tags:
@@ -32,7 +34,7 @@ Covered stages:
 - metadata;
 - bibliography;
 - PDF normalization;
-- PDF-processing Markdown and Gemini extraction;
+- PDF-processing Markdown and LLM extraction;
 - claims extraction.
 
 Not covered:
@@ -60,6 +62,7 @@ data/inputs/seeds/*.jsonl or --doi
   -> data/runtime/03-pdf_processing/{paper_id}/paper.md
   -> data/runtime/03-pdf_processing/{paper_id}/raw_batches/*.json
   -> data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
+  -> data/runtime/03-pdf_processing/{paper_id}/paper.final.json
   -> data/runtime/04-claims_by_model/{model_slug}/{paper_id}.claims.json
 ```
 
@@ -89,18 +92,18 @@ data/inputs/seeds/*.jsonl or --doi
 
 ### PDF Processing
 
-- Inputs are active PDFs, Markdown prompts, Gemini credentials, and
+- Inputs are active PDFs, Markdown prompts, an injected LLM client, and
   `pdf_processing` config.
-- Outputs are `paper.md`, raw Gemini batch JSON, `paper.processed.json`, and
-  status JSONL.
+- Outputs are `paper.md`, raw LLM batch JSON, `paper.processed.json`,
+  `paper.final.json`, and status JSONL.
 - `paper.md` is generated with Docling and may be reused unless forced.
 - Raw batch files must be written before final merge so partial model output can
   be inspected.
-- Section registry state is accumulated across batches. Batch 1 contributes
+- Section registry state is accumulated across batches. Batch 0 contributes
   `section_registry`; continuation batches contribute `updated_section_registry`.
 - Final success requires a merged structured JSON file, processed-paper contract
-  enforcement, and a done status.
-- Final `paper.processed.json` blocks must use `block_id` in
+  enforcement, trimmed final JSON, and a done status.
+- Final `paper.final.json` blocks must use `block_id` in
   `{paper_hash}:b{order}` format and `content_hash` for normalized text
   identity.
 
@@ -118,7 +121,7 @@ data/inputs/seeds/*.jsonl or --doi
   `batching_failed`, `llm_failed`, or `processing_failed`.
 - Directory-level PDF-processing continues other pending PDFs when one PDF
   fails.
-- Quota/cooldown state for Gemini survives process restarts.
+- Provider retry, fallback, and quota behavior is owned by LiteLLM.
 - Claims extraction records per-file failures in CLI output and continues
   through the remaining input files.
 

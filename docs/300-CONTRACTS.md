@@ -44,10 +44,10 @@ Contracts cover:
 - stage handoff locations;
 - stable identity terms;
 - required validation expectations;
-- compatibility boundaries between processing stages.
+- compatibility boundaries between processing stages;
 - config and environment resolution that affects paths or models;
 - public CLI command names used by operators and agents;
-- schema-level expectations for current durable artifacts.
+- schema-level expectations for current durable artifacts;
 - claim extraction schema and field-level semantics.
 
 Contracts do not cover:

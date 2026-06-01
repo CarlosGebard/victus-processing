@@ -4,13 +4,14 @@ import argparse
 from pathlib import Path
 
 from src.workspace import config as ctx
-from src.claims.stage import run_llm_to_claim_flow
+from src.application.claims.stage import run_llm_to_claim_flow
 from src.workspace.data_layout import create_data_layout
-from src.pdf_extraction.json_to_bib import generate_bib_flow
-from src.metadata import gap_seed_dois, seed_dois
-from src.pdf_extraction import normalize_from_relations
-from src.pdf_processing.markdown import pdf_dir_to_markdown
-from src.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
+from src.application.pdf_extraction.json_to_bib import generate_bib_flow
+from src.application.metadata import gap_seed_dois, seed_dois
+from src.application.pdf_extraction import normalize_from_relations
+from src.application.pdf_processing.markdown import pdf_dir_to_markdown
+from src.application.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
+from src.infrastructure.llm.factory import build_llm_client
 
 run_metadata_exploration_flow = None
 
@@ -32,15 +33,15 @@ def _optional_resolved(path: Path | None) -> Path | None:
 def cmd_metadata_explore(args: argparse.Namespace) -> None:
     global run_metadata_exploration_flow
     if run_metadata_exploration_flow is None:
-        from src.metadata.stage import run_metadata_exploration_flow as loaded_run_metadata_exploration_flow
+        from src.application.metadata.stage import run_metadata_exploration_flow as loaded_run_metadata_exploration_flow
 
         run_metadata_exploration_flow = loaded_run_metadata_exploration_flow
 
-    run_metadata_exploration_flow(mode=args.mode)
+    run_metadata_exploration_flow(mode=args.mode, llm_client=build_llm_client())
 
 
 def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
-    from src.metadata import citation_exploration
+    from src.application.metadata import citation_exploration
 
     try:
         output_path, status = citation_exploration.write_metadata_for_doi(
@@ -178,6 +179,7 @@ def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
         "prompt_continuation_batch": _optional_resolved(args.prompt_continuation_batch),
         "force_markdown": args.force_markdown,
         "max_batches": args.max_batches,
+        "llm_client": build_llm_client(),
     }
     if args.pdf:
         output_path = run_pdf_processing(_resolved(args.pdf), **common_kwargs)
@@ -216,6 +218,7 @@ def cmd_claims_extract(args: argparse.Namespace) -> None:
             ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS if args.auto_approve_under_7000_tokens else None
         ),
         skip_existing=args.skip_existing,
+        llm_client=build_llm_client(),
     )
 
 
@@ -400,13 +403,13 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     defaults = load_pdf_processing_config()
     pdf_processing_parser = subparsers.add_parser(
         "pdf-processing",
-        help="Docling Markdown y extraccion Gemini desde PDFs cientificos",
+        help="Docling Markdown y extraccion LLM desde PDFs cientificos",
     )
     pdf_processing_subparsers = pdf_processing_parser.add_subparsers(dest="pdf_processing_command")
 
     run_parser = pdf_processing_subparsers.add_parser(
         "run",
-        help="Convierte PDF con Docling, procesa batches con Gemini y genera paper.processed.json",
+        help="Convierte PDF con Docling, procesa batches con LLM y genera paper.final.json",
     )
     run_parser.add_argument("--pdf", type=Path, default=None, help="PDF cientifico puntual de entrada")
     run_parser.add_argument(
@@ -453,7 +456,7 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
         "markdown",
         help="Convierte los PDFs activos a paper.md usando solo Docling",
         description=(
-            "Convierte PDFs a Markdown con Docling sin ejecutar batching ni Gemini. "
+            "Convierte PDFs a Markdown con Docling sin ejecutar batching ni LLM. "
             "Por defecto lee data/runtime/02-pdfs/active y escribe "
             "data/runtime/03-pdf_processing/<paper_id>/paper.md."
         ),

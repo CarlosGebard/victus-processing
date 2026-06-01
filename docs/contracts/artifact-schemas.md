@@ -6,10 +6,10 @@ updated_at: 2026-05-28
 owners:
   - architecture
 related_components:
-  - src.pdf_processing.models
-  - src.pdf_processing.pipeline
-  - src.pdf_processing.processed_paper_contract
-  - src.claims.extraction
+  - src.application.pdf_processing.models
+  - src.application.pdf_processing.pipeline
+  - src.application.pdf_processing.processed_paper_contract
+  - src.application.claims.extraction
   - src.workspace.artifacts
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
@@ -45,12 +45,25 @@ Not covered:
 
 ## 3. PDF-Processing Batch Output
 
-Each Gemini batch result must validate against the current batch model shape:
+Each LLM batch result must validate against the current prompt schema.
+
+First-batch results use:
 
 ```text
-metadata?: object
+metadata: object
+document_semantics: object
 current_section: object
 section_registry: list[object]
+batch_index: integer
+blocks: list[object]
+batch_end: object
+batch_warnings: object
+```
+
+Continuation-batch results use:
+
+```text
+current_section: object
 updated_section_registry: list[object]
 batch_index: integer
 blocks: list[object]
@@ -61,21 +74,19 @@ batch_warnings: object
 Batch block objects contain:
 
 ```text
-local_id?: string
-order: integer
 section_path: list[string]
 section_type: string
 content_kind: string
 text: string
 ```
 
-`section_registry` and `updated_section_registry` accept the current prompt
+`section_registry` and `updated_section_registry` use the current prompt
 contract:
 
 ```text
-original_title?: string
-canonical_title?: string
-section_type?: string
+original_title: string
+canonical_title: string
+section_type: string
 parent?: string | null
 ```
 
@@ -95,20 +106,29 @@ Raw batch files are written as debug envelopes:
 }
 ```
 
-## 4. PDF-Processing Final Output
+## 4. PDF-Processing Processed and Final Outputs
 
-The canonical final output is:
+The normalized processed output is:
 
 ```text
 data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
 ```
 
-It is produced by merging validated batch outputs. Claims extraction expects a
-JSON object with a top-level `sections` list. When present, `paper`, `title`,
+It is produced by merging validated batch outputs and enforcing the
+processed-paper contract.
+
+The canonical final output is derived from `paper.processed.json`:
+
+```text
+data/runtime/03-pdf_processing/{paper_id}/paper.final.json
+```
+
+Claims extraction should consume `paper.final.json`. It expects a JSON object
+with a top-level `sections` list. When present, `paper`, `title`,
 `paper_title`, and `trace` are used as context for claims prompts.
 
-Final `blocks` are normalized by the processed-paper contract before the final
-artifact is written. Each final block must include:
+Processed and final `blocks` are normalized by the processed-paper contract.
+Each block must include:
 
 ```text
 block_id: "{paper_hash}:b{order}"
@@ -118,7 +138,6 @@ section_path: list[string]
 section_type: string
 content_kind: string
 text: string
-retrieval_exclude: boolean
 ```
 
 `block_id` is the operational block identity. It is deterministic within a
@@ -136,35 +155,23 @@ trim
 sha256(UTF-8 bytes)
 ```
 
-Final blocks must not rely on `global_block_id` or `global_id`; those fields are
-not part of the current final block contract.
+Blocks must not rely on `global_block_id` or `global_id`; those fields are not
+part of the current block contract.
 
-Final `section_type` values must be in the prompt-defined canonical set:
+Prompt-defined `section_type` values must be in this canonical set:
 
 ```text
 front_matter
 abstract
-background
 introduction
 related_work
 methods
-dataset
-evaluation
-experiments
 results
 discussion
-limitations
-future_work
 conclusion
-clinical_guideline
-recommendations
-diagnostic_criteria
-treatment
-prevention
-statistical_analysis
+references
 appendix
 supplementary
-references
 acknowledgements
 funding
 disclosure
@@ -172,15 +179,40 @@ ethics
 unknown
 ```
 
-The post-merge contract layer may normalize known aliases into this set, for
-example `frontmatter` to `front_matter`, `data_availability` to `dataset`,
-`publisher_note` to `disclosure`, and `author_contributions` to
-`acknowledgements`.
+Prompt-defined `content_kind` values must be in this canonical set:
 
-Final block repair joins adjacent blocks in the same section when a block ends
-with an obvious incomplete ending (`and`, `of`, `with`, `,`, `;`, `(`) or lacks
-terminal punctuation. Frontmatter and publisher noise are not deleted from the
-artifact; retrieval-only filtering is expressed with `retrieval_exclude: true`.
+```text
+paragraph
+table
+table_row
+figure_caption
+equation
+reference
+metadata
+```
+
+The post-merge contract layer may normalize known aliases into the canonical
+sets, for example `frontmatter` to `front_matter`, `publisher_note` to
+`disclosure`, and `author_contributions` to `acknowledgements`.
+
+Processed block repair joins adjacent blocks in the same section when a block
+ends with an obvious incomplete ending (`and`, `of`, `with`, `,`, `;`, `(`) or
+lacks terminal punctuation.
+
+Final trimming keeps only these section types:
+
+```text
+abstract
+methods
+results
+discussion
+conclusion
+supplementary
+```
+
+Final trimming removes top-level `section_registry`, `batch_warnings`, and
+`processing`. It also removes block quality flags `is_truncated` and
+`is_duplicate` when present.
 
 ## 5. Status JSONL
 

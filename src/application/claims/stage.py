@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from src.workspace import config as ctx
+from src.application.ports.llm import LLMClient
 
 
 def run_llm_to_claim_flow(
@@ -16,6 +17,7 @@ def run_llm_to_claim_flow(
     review_callback: Any = None,
     auto_approve_max_tokens: int | None = None,
     skip_existing: bool = False,
+    llm_client: LLMClient | None = None,
 ) -> None:
     claims_flow = ctx.resolve_claims_flow()
 
@@ -34,6 +36,7 @@ def run_llm_to_claim_flow(
         review_callback,
         auto_approve_max_tokens,
         skip_existing,
+        llm_client,
     )
 
     print("Extraccion de claims completada")

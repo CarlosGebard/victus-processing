@@ -4,7 +4,7 @@ from importlib import resources
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.metadata.paper_selector import PaperCandidate
+    from src.application.metadata.paper_selector import PaperCandidate
 
 
 def _read_prompt(filename: str) -> str:

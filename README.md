@@ -60,8 +60,8 @@ This repository owns:
 - local paper-processing CLI commands;
 - metadata discovery and candidate state;
 - PDF normalization into active processing inputs;
-- Docling/Gemini PDF processing artifacts;
-- OpenAI claim extraction outputs;
+- Docling/LLM PDF processing artifacts;
+- LLM claim extraction outputs via LiteLLM;
 - local runtime contracts under `data/`.
 
 This repository does not own:

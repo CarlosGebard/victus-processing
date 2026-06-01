@@ -6,20 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from src.workspace import config as ctx
-from src.pdf_processing.batching import MarkdownBatchingError, build_markdown_batches
-from src.pdf_processing.gemini import GeminiClient, load_gemini_api_keys
-from src.pdf_processing.markdown import pdf_to_markdown
-from src.pdf_processing.merge import merge_batch_outputs
-from src.pdf_processing.models import PdfProcessingConfig
-from src.pdf_processing.processed_paper_contract import enforce_processed_paper_contract
-from src.pdf_processing.quota import GeminiKeyScheduler, SQLiteQuotaRepository
-from src.pdf_processing.status import append_processing_status, load_processing_status_index, write_processing_status_index
+from src.application.pdf_processing.batching import MarkdownBatchingError, build_markdown_batches
+from src.application.ports.llm import LLMClient
+from src.application.pdf_processing.llm_markdown import extract_markdown_batch
+from src.application.pdf_processing.markdown import pdf_to_markdown
+from src.application.pdf_processing.merge import merge_batch_outputs
+from src.application.pdf_processing.models import PdfProcessingConfig
+from src.application.pdf_processing.processed_paper_contract import build_final_paper, enforce_processed_paper_contract
+from src.application.pdf_processing.status import append_processing_status, load_processing_status_index, write_processing_status_index
 
 
 def load_pdf_processing_config() -> PdfProcessingConfig:
     cfg = ctx.CONFIG.get("pdf_processing") or {}
     return PdfProcessingConfig(
-        model=str(cfg.get("model", "gemini-3.1-flash-lite")),
+        model=str(cfg.get("model", "gpt-5-mini")),
         input_dir=ctx.resolve_project_path(cfg.get("input_dir"), ctx.DATA_RUNTIME_PDFS_ACTIVE_DIR),
         output_dir=ctx.resolve_project_path(cfg.get("output_dir"), ctx.DATA_RUNTIME_PDF_PROCESSING_DIR),
         workers=int(cfg.get("workers", 1)),
@@ -35,11 +35,6 @@ def load_pdf_processing_config() -> PdfProcessingConfig:
         markdown_batch_soft_limit_chars=int(cfg.get("markdown_batch_soft_limit_chars", 9000)),
         markdown_batch_hard_limit_chars=int(cfg.get("markdown_batch_hard_limit_chars", 14000)),
         max_batches=int(cfg["max_batches"]) if cfg.get("max_batches") is not None else None,
-        requests_per_minute=int(cfg.get("requests_per_minute", 15)),
-        requests_per_day=int(cfg.get("requests_per_day", 500)),
-        cooldown_429_seconds=int(cfg.get("cooldown_429_seconds", 60)),
-        cooldown_5xx_seconds=int(cfg.get("cooldown_5xx_seconds", 30)),
-        cooldown_network_seconds=int(cfg.get("cooldown_network_seconds", 30)),
         request_timeout_seconds=float(cfg.get("request_timeout_seconds", 120)),
     )
 
@@ -72,9 +67,9 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _final_output_paths(output_dir: Path, pdf_path: Path) -> tuple[Path, Path]:
+def _final_output_paths(output_dir: Path, pdf_path: Path) -> tuple[Path, Path, Path]:
     paper_dir = paper_output_dir(output_dir, pdf_path)
-    return paper_dir / "paper.processed.json", paper_dir / "paper.json"
+    return paper_dir / "paper.processed.json", paper_dir / "paper.final.json", paper_dir / "paper.json"
 
 
 def _rename_legacy_output(final_output: Path, legacy_final_output: Path) -> Path:
@@ -118,6 +113,7 @@ async def run_pdf_processing_async(
     prompt_continuation_batch: Path | None = None,
     force_markdown: bool = False,
     max_batches: int | None = None,
+    llm_client: LLMClient | None = None,
 ) -> Path:
     resolved_config = config or load_pdf_processing_config()
     if output_dir is not None:
@@ -138,17 +134,27 @@ async def run_pdf_processing_async(
     paper_id = pdf_path.stem
     markdown_output = paper_dir / "paper.md"
     raw_batches_dir = paper_dir / "raw_batches"
-    final_output, legacy_final_output = _final_output_paths(resolved_config.output_dir, pdf_path)
+    processed_output, final_output, legacy_final_output = _final_output_paths(resolved_config.output_dir, pdf_path)
     status_file = resolved_config.output_dir / "processing_status.jsonl"
-    if final_output.exists() or legacy_final_output.exists():
-        resolved_output = _rename_legacy_output(final_output, legacy_final_output)
+    if final_output.exists():
         append_processing_status(
             status_file,
             paper_id=paper_id,
             status="done",
         )
         print(f"[SKIP DONE] {paper_id}")
-        return resolved_output
+        return final_output
+    if processed_output.exists() or legacy_final_output.exists():
+        resolved_output = _rename_legacy_output(processed_output, legacy_final_output)
+        processed = json.loads(resolved_output.read_text(encoding="utf-8"))
+        _write_json(final_output, build_final_paper(processed))
+        append_processing_status(
+            status_file,
+            paper_id=paper_id,
+            status="done",
+        )
+        print(f"[FINALIZED] {paper_id}")
+        return final_output
 
     status_error_written = False
     try:
@@ -184,14 +190,9 @@ async def run_pdf_processing_async(
         if not batches:
             raise RuntimeError(f"No markdown batches generated for {pdf_path}")
 
-        api_keys = load_gemini_api_keys()
-        quota_repo = SQLiteQuotaRepository(ctx.DATA_RUNTIME_QUOTAS_DIR / "gemini.sqlite3")
-        scheduler = GeminiKeyScheduler(
-            quota_repo,
-            requests_per_minute=resolved_config.requests_per_minute,
-            requests_per_day=resolved_config.requests_per_day,
-        )
-        client = GeminiClient(config=resolved_config, scheduler=scheduler, api_keys=api_keys)
+        if llm_client is None:
+            raise RuntimeError("LLM client is required.")
+        client = llm_client
 
         first_prompt = _read_prompt(resolved_config.prompt_first_batch)
         continuation_template = _read_prompt(resolved_config.prompt_continuation_batch)
@@ -205,7 +206,13 @@ async def run_pdf_processing_async(
                 f"chars={len(batch.text)} range={batch.start_char}:{batch.end_char}"
             )
             try:
-                result = await client.extract_markdown_batch(prompt, batch)
+                result = await extract_markdown_batch(
+                    client,
+                    model=resolved_config.model,
+                    prompt=prompt,
+                    batch=batch,
+                    paper_id=paper_id,
+                )
             except Exception as exc:
                 _append_failed_status(status_file, paper_id=paper_id, error="llm_failed", exc=exc)
                 status_error_written = True
@@ -230,7 +237,8 @@ async def run_pdf_processing_async(
             config=resolved_config,
         )
         merged = enforce_processed_paper_contract(merged)
-        _write_json(final_output, merged)
+        _write_json(processed_output, merged)
+        _write_json(final_output, build_final_paper(merged))
         append_processing_status(
             status_file,
             paper_id=paper_id,
@@ -317,9 +325,8 @@ async def run_pdf_processing_dir_async(
     pending_pdfs: list[Path] = []
     for pdf_path in pdfs:
         paper_id = pdf_path.stem
-        final_output, legacy_final_output = _final_output_paths(resolved_config.output_dir, pdf_path)
-        if final_output.exists() or legacy_final_output.exists():
-            resolved_output = _rename_legacy_output(final_output, legacy_final_output)
+        _processed_output, final_output, _legacy_final_output = _final_output_paths(resolved_config.output_dir, pdf_path)
+        if final_output.exists():
             append_processing_status(
                 status_file,
                 paper_id=paper_id,
@@ -332,7 +339,7 @@ async def run_pdf_processing_dir_async(
             }
             print(f"[SKIP DONE] {paper_id}")
             continue
-        if (status_index.get(paper_id) or {}).get("status") == "done":
+        if (status_index.get(paper_id) or {}).get("status") == "done" and final_output.exists():
             print(f"[SKIP DONE] {paper_id}")
             continue
         pending_pdfs.append(pdf_path)

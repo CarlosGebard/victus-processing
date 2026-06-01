@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.metadata.paper_selector import PaperCandidate
+from src.application.metadata.paper_selector import PaperCandidate
 from src.prompts import (
     CLAIMS_PROMPT_TEMPLATE,
     build_claims_prompt,

@@ -1,5 +1,5 @@
 pdf_processing:
-  model: "gemini-3.1-flash-lite"
+  model: "gpt-5-mini"
   input_dir: "data/runtime/02-pdfs/active"
   output_dir: "data/runtime/03-pdf_processing"
   workers: 1
@@ -9,9 +9,4 @@ pdf_processing:
   markdown_batch_soft_limit_chars: 9000
   markdown_batch_hard_limit_chars: 14000
   max_batches: null
-  requests_per_minute: 15
-  requests_per_day: 500
-  cooldown_429_seconds: 60
-  cooldown_5xx_seconds: 30
-  cooldown_network_seconds: 30
   request_timeout_seconds: 120

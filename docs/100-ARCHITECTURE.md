@@ -1,7 +1,7 @@
 ---
 id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
-status: source-of-truth
+status: active
 updated_at: 2026-05-27
 owners:
   - architecture
@@ -59,17 +59,17 @@ files, not hidden in memory or remote services.
 
 ### Metadata Stage
 
-- **Path:** `src/metadata/`
+- **Path:** `src/application/metadata/`
 - **Responsibility:** discover, fetch, classify, and store paper metadata
   candidates.
 - **Inputs:** seed DOI queues, DOI arguments, Semantic Scholar responses.
 - **Outputs:** metadata JSON, reviewed indexes, discarded indexes.
-- **Dependencies:** Semantic Scholar API, OpenAI metadata selection.
+- **Dependencies:** Semantic Scholar API, internal LLM client port.
 - **Boundary:** owns pre-PDF candidate state.
 
 ### PDF Extraction and Normalization
 
-- **Path:** `src/pdf_extraction/`
+- **Path:** `src/application/pdf_extraction/`
 - **Responsibility:** generate bibliography outputs and normalize raw PDFs into
   active pipeline inputs.
 - **Inputs:** metadata records, relation CSV files, raw PDFs.
@@ -79,22 +79,22 @@ files, not hidden in memory or remote services.
 
 ### PDF Processing Stage
 
-- **Path:** `src/pdf_processing/`
+- **Path:** `src/application/pdf_processing/`
 - **Responsibility:** convert active PDFs into Markdown, split Markdown into
-  batches, call Gemini, validate batch outputs, and merge structured paper JSON.
+  batches, call the internal LLM client, validate batch outputs, and merge structured paper JSON.
 - **Inputs:** active PDFs, prompt files, PDF-processing config.
 - **Outputs:** Markdown, raw batch JSON, merged structured paper JSON, status.
-- **Dependencies:** Docling, Gemini API, SQLite quota state.
+- **Dependencies:** Docling, internal LLM client port.
 - **Boundary:** owns post-PDF structured paper artifacts.
 
 ### Claims Stage
 
-- **Path:** `src/claims/`
+- **Path:** `src/application/claims/`
 - **Responsibility:** extract validated empirical claims from structured paper
   JSON.
 - **Inputs:** structured paper JSON, claim prompt, model configuration.
 - **Outputs:** model-specific claims JSON.
-- **Dependencies:** OpenAI API.
+- **Dependencies:** internal LLM client port.
 - **Boundary:** owns claim extraction outputs, not downstream analytics.
 
 ### Prompt Assets
@@ -120,8 +120,9 @@ Internal boundaries:
 External boundaries:
 
 - Semantic Scholar provides metadata and citation graph data.
-- OpenAI provides metadata-selection and claim-extraction model responses.
-- Gemini provides structured extraction from Markdown batches.
+- LiteLLM provides provider routing, model selection, retries, fallbacks, and
+  provider credentials for all LLM requests.
+- Langfuse observes only LLM request boundaries.
 - Optional Victus bridge integrations are outside the core local pipeline.
 - Analytics, RAG indexing, vector stores, and production deployment are outside
   this repository.
@@ -166,7 +167,6 @@ Artifact roles:
 - `data/runtime/03-pdf_processing/`: Markdown, raw batches, merged paper JSON,
   and processing status.
 - `data/runtime/04-claims_by_model/`: extracted claims grouped by model.
-- `data/runtime/quotas/`: Gemini quota and cooldown state.
 
 Detailed path, handoff, configuration, CLI, and schema contracts live in
 [Contracts](300-CONTRACTS.md).
@@ -186,10 +186,9 @@ Detailed path, handoff, configuration, CLI, and schema contracts live in
 ## 7. External Dependencies
 
 - **Semantic Scholar API:** metadata and citation exploration.
-- **OpenAI API:** metadata selection and claim extraction.
-- **Gemini API:** structured extraction from Markdown batches.
+- **LiteLLM:** provider abstraction for all LLM requests.
+- **Langfuse:** LLM request boundary tracing.
 - **Docling:** local PDF-to-Markdown conversion.
-- **SQLite:** local Gemini key scheduling and quota persistence.
 - **Local filesystem:** primary durable state store.
 - **Optional Victus infrastructure:** bridge-facing registry, object storage,
   events, Postgres, Redis, or S3-compatible services.

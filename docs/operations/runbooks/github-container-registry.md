@@ -36,7 +36,7 @@ Run with project data mounted:
 
 ```bash
 docker run --rm \
-  --env OPENAI_API_KEY \
+  --env LITELLM_API_KEY \
   --env SEMANTIC_SCHOLAR_API_KEY \
   --volume "$PWD/data:/app/data" \
   victus-processing:local data-layout create --dry-run

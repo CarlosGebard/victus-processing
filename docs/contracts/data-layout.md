@@ -8,10 +8,11 @@ owners:
 related_components:
   - src.workspace.config
   - src.workspace.data_layout
-  - src.metadata
-  - src.pdf_extraction
-  - src.pdf_processing
-  - src.claims
+  - src.application.metadata
+  - src.application.pdf_extraction
+  - src.application.pdf_processing
+  - src.application.claims
+  - src.application.ports.llm
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -35,7 +36,7 @@ Covered:
 - local runtime directories;
 - stage input and output locations;
 - pre-PDF and post-PDF identities;
-- status and quota persistence locations;
+- status persistence locations;
 - compatibility expectations between stages.
 
 Not covered:
@@ -58,7 +59,6 @@ Not covered:
 - Active PDFs live under `data/runtime/02-pdfs/active/` by default.
 - PDF-processing artifacts live under `data/runtime/03-pdf_processing/`.
 - Claim outputs live under `data/runtime/04-claims_by_model/`.
-- Gemini quota state lives under `data/runtime/quotas/`.
 - Registry artifacts live under `data/registry/`.
 - Report and audit artifacts live under `data/reports/`.
 - `data/` is runtime state and must not be treated as disposable source code.
@@ -84,13 +84,12 @@ data/
         paper.md
         raw_batches/
         paper.processed.json
+        paper.final.json
       processing_status.jsonl
       markdown_status.jsonl
     04-claims_by_model/
       {model_slug}/
         {paper_id}.claims.json
-    quotas/
-      gemini.sqlite3
     tmp/
     logs/
     queues/
@@ -121,11 +120,12 @@ layout above unless an explicit compatibility task requires the legacy path.
   `data/runtime/03-pdf_processing/{paper_id}/`.
 - PDF-processing must not write one paper's artifacts into another paper's
   directory.
-- The merged structured paper output is `paper.processed.json`.
+- The merged structured paper output is `paper.processed.json`; the trimmed
+  handoff artifact is `paper.final.json`.
 - `paper.json` is a legacy PDF-processing final output name. When encountered,
   the current pipeline renames it to `paper.processed.json` if the canonical
   output is absent.
-- Raw Gemini batch outputs are retained under `raw_batches/`.
+- Raw LLM batch outputs are retained under `raw_batches/`.
 - Stage status files are operational state, not disposable debug logs.
 - Claim outputs are grouped by model.
 - Claim output model directory names use lowercase model slugs with `/` and
@@ -158,7 +158,8 @@ layout above unless an explicit compatibility task requires the legacy path.
 
 - **Input:** active PDFs.
 - **Output:** `paper.md`, `raw_batches/`, `paper.processed.json`,
-  `processing_status.jsonl`, and optional `markdown_status.jsonl`.
+  `paper.final.json`, `processing_status.jsonl`, and optional
+  `markdown_status.jsonl`.
 - **Identity:** `paper_id` equals the input PDF stem.
 
 ### Claims
@@ -175,7 +176,7 @@ layout above unless an explicit compatibility task requires the legacy path.
 - Validation failures should prevent invalid outputs from being treated as
   successful stage results.
 - Partial failures should be visible through status artifacts or CLI output.
-- Quota/cooldown state must persist outside process memory.
+- Provider quota, retry, and fallback behavior is owned by LiteLLM.
 - `processing_status.jsonl` rows with `status: failed` must include an error
   code when the pipeline can classify the failure.
 - Invalid or missing model output JSON must fail the stage rather than producing

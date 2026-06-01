@@ -11,7 +11,7 @@ normalizados, artefactos estructurados y claims.
 - guarda metadata canónica
 - normaliza PDFs crudos
 - procesa PDFs con Docling y heurísticas locales
-- extrae claims con modelos OpenAI
+- extrae claims con modelos LLM via LiteLLM
 - expone bridge para registry, storage y eventos Victus
 
 ## Uso Local

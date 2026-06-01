@@ -5,8 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib import error, request
 
+from src.application.ports.llm import LLMClient, LLMRequest
 from src.prompts import (
     build_paper_selector_user_prompt,
     get_paper_selector_system_prompt,
@@ -116,7 +116,7 @@ def build_responses_payload(
 def extract_output_text(response_json: dict[str, Any]) -> str:
     output = response_json.get("output", [])
     if not isinstance(output, list):
-        raise ValueError("La respuesta de OpenAI no contiene una lista válida en 'output'.")
+        raise ValueError("La respuesta del modelo no contiene una lista válida en 'output'.")
 
     for item in output:
         if not isinstance(item, dict):
@@ -131,7 +131,15 @@ def extract_output_text(response_json: dict[str, Any]) -> str:
             if isinstance(text, str) and text.strip():
                 return text
 
-    raise ValueError("No se encontró texto JSON en la respuesta de OpenAI.")
+    raise ValueError("No se encontró texto JSON en la respuesta del modelo.")
+
+
+def normalize_decisions_text(
+    raw_text: str,
+    candidates: list[PaperCandidate],
+) -> list[dict[str, str]]:
+    parsed = json.loads(raw_text)
+    return _normalize_decision_payload(parsed, candidates)
 
 
 def normalize_decisions(
@@ -140,6 +148,13 @@ def normalize_decisions(
 ) -> list[dict[str, str]]:
     raw_text = extract_output_text(response_json)
     parsed = json.loads(raw_text)
+    return _normalize_decision_payload(parsed, candidates)
+
+
+def _normalize_decision_payload(
+    parsed: dict[str, Any],
+    candidates: list[PaperCandidate],
+) -> list[dict[str, str]]:
     decisions = parsed.get("decisions", [])
     if not isinstance(decisions, list):
         raise ValueError("La respuesta JSON del modelo no contiene una lista válida en 'decisions'.")
@@ -180,42 +195,32 @@ def normalize_decisions(
     return sorted(normalized, key=lambda item: item["id"])
 
 
-def classify_papers_with_openai(
+def classify_papers_with_llm(
     candidates: list[PaperCandidate],
     model: str,
     *,
     selection_profile: str = "broad-nutrition",
+    client: LLMClient,
     dotenv_path: str | Path = DEFAULT_DOTENV_PATH,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
-    api_key = get_env_value("OPENAI_API_KEY", dotenv_path=dotenv_path)
-    base_url = get_env_value("OPENAI_BASE_URL", default="https://api.openai.com/v1", dotenv_path=dotenv_path)
-
-    if not api_key:
-        raise ValueError("Falta OPENAI_API_KEY en el entorno o en .env.")
-
-    payload = build_responses_payload(
-        model=model,
-        candidates=candidates,
-        selection_profile=selection_profile,
+    response = client.complete(
+        LLMRequest(
+            operation="metadata.paper_selection",
+            model=model,
+            messages=[
+                {"role": "system", "content": get_paper_selector_system_prompt(selection_profile)},
+                {"role": "user", "content": build_user_prompt(candidates)},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": OUTPUT_SCHEMA["name"],
+                    "strict": OUTPUT_SCHEMA["strict"],
+                    "schema": OUTPUT_SCHEMA["schema"],
+                },
+            },
+            metadata={"selection_profile": selection_profile, "candidate_count": len(candidates)},
+        )
     )
-    body = json.dumps(payload).encode("utf-8")
-
-    req = request.Request(
-        url=f"{base_url.rstrip('/')}/responses",
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(req) as resp:
-            response_json = json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Error HTTP al llamar a OpenAI: {exc.code} {detail}") from exc
-
-    decisions = normalize_decisions(response_json, candidates)
-    return decisions, response_json
+    decisions = normalize_decisions_text(response.text, candidates)
+    return decisions, response.raw

@@ -67,7 +67,7 @@ def test_main_routes_metadata_explore(monkeypatch) -> None:
     called: list[str] = []
 
     monkeypatch.setattr(sys, "argv", ["cli.py", "metadata", "explore", "--mode", "dataset-gaps"])
-    monkeypatch.setattr(cli, "run_metadata_exploration_flow", lambda mode: called.append(mode))
+    monkeypatch.setattr(cli, "run_metadata_exploration_flow", lambda mode, **kwargs: called.append(mode))
 
     cli.main()
 
@@ -162,10 +162,11 @@ def test_main_routes_claims_extract(monkeypatch, tmp_path: Path) -> None:
             "max_claims": None,
             "temperature": None,
             "pattern": "*/*.final.json",
-            "auto_approve_max_tokens": cli.ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS,
-            "skip_existing": True,
-        }
-    ]
+                "auto_approve_max_tokens": cli.ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS,
+                "skip_existing": True,
+                "llm_client": called[0]["llm_client"],
+            }
+        ]
 
 
 def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
@@ -188,6 +189,7 @@ def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
         "prompt_continuation_batch": None,
         "force_markdown": True,
         "max_batches": None,
+        "llm_client": called[0]["llm_client"],
     }]
 
 

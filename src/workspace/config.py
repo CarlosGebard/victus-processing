@@ -30,7 +30,6 @@ DATA_RUNTIME_PDFS_ACTIVE_DIR = DATA_RUNTIME_PDFS_DIR / "active"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
 DATA_RUNTIME_PDF_PROCESSING_DIR = DATA_RUNTIME_DIR / "03-pdf_processing"
 DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "04-claims_by_model"
-DATA_RUNTIME_QUOTAS_DIR = DATA_RUNTIME_DIR / "quotas"
 DATA_RUNTIME_TMP_DIR = DATA_RUNTIME_DIR / "tmp"
 DATA_RUNTIME_LOGS_DIR = DATA_RUNTIME_DIR / "logs"
 DATA_RUNTIME_QUEUES_DIR = DATA_RUNTIME_DIR / "queues"
@@ -259,7 +258,6 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_RUNTIME_PDFS_ACTIVE_DIR,
         DATA_RUNTIME_PDF_PROCESSING_DIR,
         DATA_RUNTIME_CLAIMS_DIR,
-        DATA_RUNTIME_QUOTAS_DIR,
         DATA_REPORTS_DIR,
         DATA_REPORTS_AUDITS_DIR,
         PRE_INGESTION_EDITABLE_DIR,
@@ -346,13 +344,13 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
 
 @lru_cache(maxsize=1)
 def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[int, int]]:
-    from src.pdf_extraction.normalization import sync_raw_pdfs_into_input
+    from src.application.pdf_extraction.normalization import sync_raw_pdfs_into_input
 
     return sync_raw_pdfs_into_input
 
 
 @lru_cache(maxsize=1)
 def resolve_claims_flow() -> Callable[..., tuple[int, int, int]]:
-    from src.claims.extraction import run_claim_extraction_flow
+    from src.application.claims.extraction import run_claim_extraction_flow
 
     return run_claim_extraction_flow

@@ -1,4 +1,4 @@
-"""Gemini-based PDF Markdown extraction pipeline."""
+"""PDF Markdown extraction application pipeline."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 
 def run_pdf_processing(pdf_path: Path, **kwargs: Any) -> Path:
-    from src.pdf_processing.pipeline import run_pdf_processing as _run_pdf_processing
+    from src.application.pdf_processing.pipeline import run_pdf_processing as _run_pdf_processing
 
     return _run_pdf_processing(pdf_path, **kwargs)
 

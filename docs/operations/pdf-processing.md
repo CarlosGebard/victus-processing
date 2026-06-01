@@ -8,7 +8,7 @@ owners:
 tags:
   - operations
   - pdf-processing
-  - gemini
+  - llm
 ---
 
 # PDF Processing Operations
@@ -18,8 +18,9 @@ PDF processing converts active PDFs into Markdown and structured paper JSON.
 Runtime sequence:
 
 ```text
-PDF -> Docling Markdown -> Markdown batches -> Gemini JSON -> merged JSON
+PDF -> Docling Markdown -> Markdown batches -> LLM JSON -> merged JSON
   -> processed-paper contract enforcement -> paper.processed.json
+  -> final trimming -> paper.final.json
 ```
 
 Run all active PDFs:
@@ -52,7 +53,7 @@ Operational inputs:
 - active PDFs under `data/runtime/02-pdfs/active/`;
 - prompts under `src/prompts/`;
 - runtime defaults in `config/pdf_processing.yaml`;
-- Gemini credentials from `GEMINI_KEY*`.
+- LiteLLM provider credentials and routing configuration.
 
 Batching behavior:
 
@@ -87,29 +88,28 @@ Final block contract:
 - Final `content_hash` is SHA-256 over normalized block text.
 - `global_block_id` and `global_id` are not part of the current final block
   contract.
-- `retrieval_exclude: true` marks frontmatter or publisher noise that should not
-  be used for retrieval.
+- `paper.final.json` keeps only abstract, methods, results, discussion,
+  conclusion, and supplementary sections.
 
 Operational outputs:
 
 - `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
 - `data/runtime/03-pdf_processing/{paper_id}/raw_batches/`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
-- `data/runtime/03-pdf_processing/processing_status.jsonl`;
-- `data/runtime/quotas/gemini.sqlite3`.
+- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`;
+- `data/runtime/03-pdf_processing/processing_status.jsonl`.
 
 Claims handoff:
 
-- current PDF-processing writes `paper.processed.json`;
+- current PDF-processing writes `paper.final.json`;
 - `claims extract` defaults to `*/*.final.json` for compatibility;
-- use `--pattern "*/paper.processed.json"` when extracting claims from current
+- use `--pattern "*/paper.final.json"` when extracting claims from current
   PDF-processing outputs.
 
-Quota behavior:
+LLM behavior:
 
-- request limits are configured in `config/pdf_processing.yaml`;
-- 429, 5xx, and network failures place keys in cooldown;
-- quota/cooldown state survives process restarts through SQLite.
+- provider credentials, routing, retries, fallbacks, and quota behavior are
+  handled by LiteLLM outside the application pipeline.
 
 Testing notes:
 
@@ -118,8 +118,7 @@ Testing notes:
 - `data/testing/e2e_contract_batch_10k_12k_20k/` contains a comparison run using
   target 10000, soft limit 12000, and hard limit 20000.
 - Test runs exclude the `01aadd...` paper by convention for this audit set.
-- Gemini quota can require retrying failed papers after cooldown; successful
-  partial outputs are preserved by paper directory.
+- successful partial outputs are preserved by paper directory.
 
 Related: [Operations](../200-OPERATIONS.md),
 [Data Layout Contract](../contracts/data-layout.md).

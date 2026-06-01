@@ -19,11 +19,6 @@ class PdfProcessingConfig:
     markdown_batch_soft_limit_chars: int = 9000
     markdown_batch_hard_limit_chars: int = 14000
     max_batches: int | None = None
-    requests_per_minute: int = 15
-    requests_per_day: int = 500
-    cooldown_429_seconds: int = 60
-    cooldown_5xx_seconds: int = 30
-    cooldown_network_seconds: int = 30
     request_timeout_seconds: float = 120.0
 
 
@@ -119,13 +114,3 @@ class MarkdownBatchOutput(BaseModel):
 
     def as_clean_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
-
-
-@dataclass(frozen=True)
-class KeyState:
-    key_id: str
-    daily_used: int = 0
-    minute_used: int = 0
-    cooldown_until: float | None = None
-    last_error: str | None = None
-    updated_at: str | None = None

@@ -19,7 +19,8 @@ from src.workspace.config import (
     get_pipeline_paths,
 )
 from src.workspace.artifacts import build_base_name, normalize_doi
-from src.metadata.paper_selector import PaperCandidate, classify_papers_with_openai
+from src.application.ports.llm import LLMClient
+from src.application.metadata.paper_selector import PaperCandidate, classify_papers_with_llm
 
 
 config = get_config()
@@ -44,7 +45,7 @@ max_words = config["exploration"]["max_abstract_words"]
 min_year = config["exploration"].get("min_year", 2000)
 metadata_selection_cfg = config.get("metadata_selection") or {}
 selection_model = get_env_or_config(
-    "OPENAI_METADATA_SELECTION_MODEL",
+    "LITELLM_METADATA_SELECTION_MODEL",
     "metadata_selection",
     "model",
     default="gpt-5-mini",
@@ -686,6 +687,7 @@ def _process_selection_batch(
     accepted: int,
     *,
     processed_papers: set[str],
+    llm_client: LLMClient,
     selection_mode: str = "broad-nutrition",
 ) -> tuple[int, int, int, int]:
     if not batch:
@@ -693,10 +695,11 @@ def _process_selection_batch(
 
     normalized_mode = normalize_selection_mode(selection_mode)
     candidates = [_build_paper_candidate(index + 1, item["paper"]) for index, item in enumerate(batch)]
-    decisions, _raw_response = classify_papers_with_openai(
+    decisions, _raw_response = classify_papers_with_llm(
         candidates=candidates,
         model=selection_model,
         selection_profile=normalized_mode,
+        client=llm_client,
     )
     decisions_by_id = {item["id"]: item for item in decisions}
     processed_count = 0
@@ -760,6 +763,7 @@ def explore_with_llm_selection(
     seed_dois: list[str] | None = None,
     selection_mode: str,
     summary_label: str,
+    llm_client: LLMClient,
 ) -> None:
     normalized_mode = normalize_selection_mode(selection_mode)
     if seed_dois is None:
@@ -826,6 +830,7 @@ def explore_with_llm_selection(
                 batch,
                 accepted,
                 processed_papers=processed_papers,
+                llm_client=llm_client,
                 selection_mode=normalized_mode,
             )
             reviewed += processed_count
@@ -837,6 +842,7 @@ def explore_with_llm_selection(
                 batch,
                 accepted,
                 processed_papers=processed_papers,
+                llm_client=llm_client,
                 selection_mode=normalized_mode,
             )
             reviewed += processed_count
@@ -850,13 +856,14 @@ def explore_with_llm_selection(
             batch,
             accepted,
             processed_papers=processed_papers,
+            llm_client=llm_client,
             selection_mode=normalized_mode,
         )
         reviewed += processed_count
         dropped += dropped_count
 
     print(f"\nResumen metadata {summary_label}")
-    print(f"- Modelo OpenAI:          {selection_model}")
+    print(f"- Modelo LLM:             {selection_model}")
     print(f"- Seed DOI file:          {seed_doi_file}")
     print(f"- Seed DOIs loaded:       {len(resolved_seed_dois)}")
     print(f"- Seed DOI done file:     {completed_seed_doi_file}")
@@ -872,31 +879,33 @@ def explore_with_llm_selection(
     print(f"- Source exhausted:       {'yes' if exhausted else 'no'}")
 
 
-def explore_with_nutrition_rag(seed_dois: list[str] | None = None) -> None:
+def explore_with_nutrition_rag(seed_dois: list[str] | None = None, *, llm_client: LLMClient) -> None:
     explore_with_llm_selection(
         seed_dois=seed_dois,
         selection_mode="broad-nutrition",
         summary_label="broad-nutrition",
+        llm_client=llm_client,
     )
 
 
-def explore_with_dataset_gaps(seed_dois: list[str] | None = None) -> None:
+def explore_with_dataset_gaps(seed_dois: list[str] | None = None, *, llm_client: LLMClient) -> None:
     explore_with_llm_selection(
         seed_dois=seed_dois,
         selection_mode="dataset-gaps",
         summary_label="dataset-gaps",
+        llm_client=llm_client,
     )
 
 
-def run_nutrition_rag_exploration() -> None:
-    _run_llm_selection_exploration("broad-nutrition")
+def run_nutrition_rag_exploration(*, llm_client: LLMClient) -> None:
+    _run_llm_selection_exploration("broad-nutrition", llm_client=llm_client)
 
 
-def run_dataset_gaps_exploration() -> None:
-    _run_llm_selection_exploration("dataset-gaps")
+def run_dataset_gaps_exploration(*, llm_client: LLMClient) -> None:
+    _run_llm_selection_exploration("dataset-gaps", llm_client=llm_client)
 
 
-def _run_llm_selection_exploration(selection_mode: str) -> None:
+def _run_llm_selection_exploration(selection_mode: str, *, llm_client: LLMClient) -> None:
     normalized_mode = normalize_selection_mode(selection_mode)
     try:
         sync_seed_doi_queue()
@@ -928,13 +937,13 @@ def _run_llm_selection_exploration(selection_mode: str) -> None:
     print()
 
     if normalized_mode == "broad-nutrition":
-        explore_with_nutrition_rag(pending_seed_dois)
+        explore_with_nutrition_rag(pending_seed_dois, llm_client=llm_client)
         return
     if normalized_mode == "dataset-gaps":
-        explore_with_dataset_gaps(pending_seed_dois)
+        explore_with_dataset_gaps(pending_seed_dois, llm_client=llm_client)
         return
     raise ValueError(f"Selection mode no soportado: {selection_mode}")
 
 
 if __name__ == "__main__":
-    run_nutrition_rag_exploration()
+    raise SystemExit("Use the victus-processing CLI so the LLM client can be injected.")

@@ -1,10 +1,8 @@
 ---
 id: VICTUS-PROCESSING-OPERATIONS
 title: Victus Processing Operations
-status: source-of-truth
+status: active
 updated_at: 2026-05-27
-owners:
-  - architecture
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -62,7 +60,7 @@ Run the main local flow:
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --pattern "*/paper.processed.json" --skip-existing
+uv run victus-processing claims extract --pattern "*/paper.final.json" --skip-existing
 ```
 
 Run a single DOI metadata fetch:
@@ -91,11 +89,16 @@ Secrets are read from environment variables or `.env`.
 Common variables:
 
 - `SEMANTIC_SCHOLAR_API_KEY`
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_MODEL`
-- `OPENAI_METADATA_SELECTION_MODEL`
-- `GEMINI_KEY*`
+- LiteLLM provider credentials and routing variables
+- `LITELLM_METADATA_SELECTION_MODEL`
+- Langfuse variables when tracing is enabled
+
+Infisical helper:
+
+```bash
+uv run victus-infisical-env export --env dev --path / --output .env
+uv run victus-infisical-env run --env dev --path / -- victus-processing --help
+```
 
 Configuration contracts and stable path expectations live in
 [Contracts](300-CONTRACTS.md).
@@ -111,11 +114,9 @@ Operational inspection sources:
 - `data/runtime/03-pdf_processing/{paper_id}/raw_batches/`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
-- `data/runtime/quotas/gemini.sqlite3`.
+- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`.
 
-Current compatibility note: the claims CLI default pattern is `*/*.final.json`.
-When consuming current PDF-processing outputs, pass
-`--pattern "*/paper.processed.json"`.
+The claims CLI default pattern is `*/*.final.json`.
 
 ## 6. Failure and Recovery
 
@@ -129,12 +130,12 @@ When consuming current PDF-processing outputs, pass
 
 ## 7. Troubleshooting
 
-- Missing `OPENAI_API_KEY`: OpenAI-backed selection or claims commands fail.
+- Missing LiteLLM provider credentials: model-backed selection, PDF processing,
+  or claims commands fail.
 - Missing `SEMANTIC_SCHOLAR_API_KEY`: Semantic Scholar may run with stricter
   public rate limits.
-- Missing `GEMINI_KEY*`: PDF-processing Gemini extraction cannot run.
-- Gemini 429/5xx/network errors: cooldown state is persisted in SQLite and later
-  runs can retry.
+- LLM 429/5xx/network errors: LiteLLM owns retries, fallbacks, provider routing,
+  and quota behavior.
 - Missing PDFs: ensure normalized PDFs exist under
   `data/runtime/02-pdfs/active/`.
 - Unexpected CLI behavior: run `uv run victus-processing --help` and the smoke

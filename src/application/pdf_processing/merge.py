@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from src.pdf_processing.models import PdfProcessingConfig
+from src.application.pdf_processing.models import PdfProcessingConfig
 
 
 DEFAULT_METADATA = {

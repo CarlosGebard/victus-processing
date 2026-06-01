@@ -7,9 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "docling==2.80.0",
     "httpx>=0.28,<1",
+    "langfuse>=3,<4",
+    "litellm>=1,<2",
     "torch",
     "torchvision",
-    "openai==2.29.0",
     "pydantic>=2.12,<3",
     "psycopg[binary]>=3.2,<4",
     "redis>=5.2,<6",
@@ -20,6 +21,7 @@ dependencies = [
 [project.scripts]
 victus-processing = "src.cli:main"
 victus-bridge = "ops.scripts.bridge.victus_ingest_bridge.cli:main"
+victus-infisical-env = "ops.scripts.infisical_env:main"
 
 [dependency-groups]
 dev = [

@@ -11,7 +11,7 @@ import yaml
 
 from src.workspace import config as ctx
 from src.workspace.artifacts import normalize_doi
-from src.metadata.text import normalize_text
+from src.application.metadata.text import normalize_text
 
 
 DEFAULT_TOPICS_FILE = ctx.PRE_INGESTION_TOPICS_YAML

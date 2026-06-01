@@ -8,6 +8,8 @@ owners:
 related_components:
   - src.cli
   - src.workspace.config
+  - src.infrastructure.llm
+  - ops.scripts.infisical_env
   - config
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
@@ -33,6 +35,7 @@ Covered:
 - `.env` loading into process environment;
 - repository-relative path resolution;
 - public `victus-processing` command groups.
+- public `victus-infisical-env` helper command.
 
 Not covered:
 
@@ -52,6 +55,9 @@ Not covered:
 - `.env` is loaded from the repository root during workspace config import.
 - `.env` values do not overwrite existing environment variables.
 - `get_env_or_config()` gives environment variables precedence over config.
+- LiteLLM and Langfuse settings are environment-driven infrastructure concerns.
+- Infisical may populate the process environment or `.env`; loaded values still
+  follow the same precedence rules above.
 
 ## 4. Public CLI Surface
 
@@ -65,6 +71,7 @@ victus-processing pdf-processing
 victus-processing claims
 victus-processing bridge
 victus-processing data-layout
+victus-infisical-env
 ```
 
 Stable subcommands currently used by operators and agents:
@@ -79,6 +86,8 @@ pdf-processing run
 pdf-processing markdown
 claims extract
 data-layout create
+victus-infisical-env export
+victus-infisical-env run
 ```
 
 These names are compatibility boundaries. Do not rename or remove them unless a
@@ -96,13 +105,16 @@ change.
 - `pdf-processing markdown` writes `paper.md` and markdown status only.
 - `claims extract` writes claims JSON from accepted structured JSON inputs.
 - `data-layout create` ensures required runtime directories exist.
+- `victus-infisical-env export` writes Infisical secrets in dotenv-compatible
+  formats.
+- `victus-infisical-env run` executes a command with Infisical secrets injected.
 
 ## 6. Failure Expectations
 
 - Missing required files or directories should fail explicitly with a clear CLI
   error.
-- Missing API keys should fail only for stages that require the corresponding
-  vendor call.
+- Missing provider credentials should fail only for model-mediated stages that
+  require an LLM request.
 - CLI commands should preserve existing output files when their documented
   skip/force/overwrite behavior says so.
 - Bridge commands may be unavailable when optional bridge modules are absent;

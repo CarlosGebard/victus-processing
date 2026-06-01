@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.pdf_processing.models import MarkdownBatch
+from src.application.pdf_processing.models import MarkdownBatch
 
 
 class MarkdownBatchingError(ValueError):
