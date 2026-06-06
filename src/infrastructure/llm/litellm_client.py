@@ -55,13 +55,15 @@ class LiteLLMClient:
             "metadata": {"operation": request.operation, **request.metadata},
         }
         proxy_base = os.getenv("LITELLM_PROXY_API_BASE")
-        proxy_key = os.getenv("LITELLM_PROXY_API_KEY")
+        proxy_key = os.getenv("LITELLM_PROXY_API_KEY") or os.getenv("LITELLM_KEY")
         if proxy_base:
-            kwargs["api_base"] = f"{proxy_base.rstrip('/')}/v1"
+            kwargs["api_base"] = proxy_base.rstrip("/")
         if proxy_key:
             kwargs["api_key"] = proxy_key
         if request.temperature is not None:
             kwargs["temperature"] = request.temperature
+        if request.max_tokens is not None:
+            kwargs["max_tokens"] = request.max_tokens
         if request.response_format is not None:
             kwargs["response_format"] = request.response_format
         return kwargs

@@ -79,8 +79,10 @@ def merge_batch_outputs(
                 "section_type": remove_recitation_separator(block.get("section_type") or block.get("type") or "unknown"),
                 "content_kind": remove_recitation_separator(block.get("content_kind") or "paragraph"),
                 "text": remove_recitation_separator(block.get("text") or block.get("content") or ""),
-                "quality": _normalize_quality(block.get("quality")),
             }
+            quality = _normalize_quality(block.get("quality"))
+            if quality:
+                normalized["quality"] = quality
             if not normalized["block_id"]:
                 normalized["block_id"] = f"block_{len(blocks):05d}"
             signature = _block_signature(normalized)
@@ -128,11 +130,7 @@ def _block_signature(block: dict[str, Any]) -> tuple[str, str, str, str]:
 
 def _normalize_quality(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
-        return {
-            "confidence": "medium",
-            "is_truncated": False,
-            "is_duplicate": False,
-        }
+        return {}
     confidence = value.get("confidence")
     return {
         "confidence": confidence if confidence in {"high", "medium", "low"} else "medium",

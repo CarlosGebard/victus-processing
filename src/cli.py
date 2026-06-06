@@ -4,21 +4,29 @@ import argparse
 from pathlib import Path
 
 from src.workspace import config as ctx
-from src.application.claims.stage import run_llm_to_claim_flow
 from src.workspace.data_layout import create_data_layout
 from src.application.pdf_extraction.json_to_bib import generate_bib_flow
 from src.application.metadata import gap_seed_dois, seed_dois
 from src.application.pdf_extraction import normalize_from_relations
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
-from src.application.pdf_processing.pipeline import load_pdf_processing_config, run_pdf_processing, run_pdf_processing_dir
+from src.application.pdf_processing.pipeline import (
+    load_pdf_processing_config,
+    run_markdown_processing,
+    run_pdf_processing,
+    run_pdf_processing_dir,
+    write_markdown_batch_debug_for_markdown,
+)
+from src.application.pdf_processing.evidence import run_pdf_evidence, run_pdf_evidence_dir
+from src.application.pdf_processing.testing_artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
 from src.infrastructure.llm.factory import build_llm_client
+from src.infrastructure.prompts.factory import build_prompt_registry
 
 run_metadata_exploration_flow = None
 
 
 CLI_DESCRIPTION = (
     "CLI profesional para el pipeline de papers. "
-    "Organizada por dominios: metadata, bib, pdfs, pdf-processing, claims, bridge y data-layout."
+    "Organizada por dominios: metadata, bib, pdfs, pdf-processing, bridge y data-layout."
 )
 
 
@@ -37,7 +45,12 @@ def cmd_metadata_explore(args: argparse.Namespace) -> None:
 
         run_metadata_exploration_flow = loaded_run_metadata_exploration_flow
 
-    run_metadata_exploration_flow(mode=args.mode, llm_client=build_llm_client())
+    run_metadata_exploration_flow(
+        mode=args.mode,
+        llm_client=build_llm_client(),
+        prompt_registry=build_prompt_registry(),
+        prompt_label=ctx.PROMPT_LABEL,
+    )
 
 
 def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
@@ -173,6 +186,8 @@ def cmd_pdfs_normalize(args: argparse.Namespace) -> None:
 
 
 def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
+    if args.pdf and args.markdown:
+        raise SystemExit("ERROR: use --pdf or --markdown, not both.")
     common_kwargs = {
         "output_dir": _optional_resolved(args.output_dir),
         "prompt_first_batch": _optional_resolved(args.prompt_first_batch),
@@ -180,7 +195,13 @@ def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
         "force_markdown": args.force_markdown,
         "max_batches": args.max_batches,
         "llm_client": build_llm_client(),
+        "prompt_registry": build_prompt_registry(),
+        "prompt_label": ctx.PROMPT_LABEL,
     }
+    if args.markdown:
+        output_path = run_markdown_processing(_resolved(args.markdown), **common_kwargs)
+        print(f"[OK] Markdown processing output: {ctx.display_path(output_path)}")
+        return
     if args.pdf:
         output_path = run_pdf_processing(_resolved(args.pdf), **common_kwargs)
         print(f"[OK] PDF processing output: {ctx.display_path(output_path)}")
@@ -206,20 +227,91 @@ def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
         print(f"- {ctx.display_path(output_path)}")
 
 
-def cmd_claims_extract(args: argparse.Namespace) -> None:
-    run_llm_to_claim_flow(
-        input_path=args.input,
-        output_path=args.output,
-        model=args.model,
-        max_claims=args.max_claims,
-        temperature=args.temperature,
+def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
+    common_kwargs = {
+        "output_dir": _optional_resolved(args.output_dir),
+        "model": args.model,
+        "skip_existing": args.skip_existing,
+        "llm_client": build_llm_client(),
+        "prompt_registry": build_prompt_registry(),
+        "prompt_label": ctx.PROMPT_LABEL,
+    }
+    if args.input.is_file():
+        output_path = run_pdf_evidence(_resolved(args.input), **common_kwargs)
+        print(f"[OK] Evidence output: {ctx.display_path(output_path)}")
+        return
+    outputs = run_pdf_evidence_dir(
+        _resolved(args.input),
         pattern=args.pattern,
-        auto_approve_max_tokens=(
-            ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS if args.auto_approve_under_7000_tokens else None
-        ),
-        skip_existing=args.skip_existing,
-        llm_client=build_llm_client(),
+        limit=args.limit,
+        **common_kwargs,
     )
+    print(f"[OK] Evidence outputs: {len(outputs)}")
+    for output_path in outputs:
+        print(f"- {ctx.display_path(output_path)}")
+
+
+def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
+    output_dir = _resolved(args.output_dir)
+    pdf_paths = iter_testing_pdf_paths(
+        pdf_dir=_resolved(args.pdf_dir),
+        paper_ids=tuple(args.paper_id or ()),
+        limit=args.limit,
+    )
+    llm_client = build_llm_client()
+    prompt_registry = build_prompt_registry()
+
+    print("Testing pipeline")
+    print(f"- output_dir: {ctx.display_path(output_dir)}")
+    print(f"- papers:     {len(pdf_paths)}")
+    for pdf_path in pdf_paths:
+        paper_id = pdf_path.stem
+        source_pdf = copy_testing_source_pdf(pdf_path, output_dir, overwrite=args.overwrite_source)
+        print(f"[TESTING SOURCE] {paper_id}: {ctx.display_path(source_pdf)}")
+        paper_dir = output_dir / paper_id
+        common_processing_kwargs = {
+            "output_dir": output_dir,
+            "prompt_first_batch": _optional_resolved(args.prompt_first_batch),
+            "prompt_continuation_batch": _optional_resolved(args.prompt_continuation_batch),
+            "force_markdown": args.force_markdown,
+            "max_batches": args.max_batches,
+            "llm_client": llm_client,
+            "prompt_registry": prompt_registry,
+            "prompt_label": ctx.PROMPT_LABEL,
+        }
+        if args.reuse_markdown:
+            markdown_path = copy_testing_markdown(
+                _resolved(args.markdown_dir),
+                output_dir,
+                paper_id,
+                overwrite=args.overwrite_markdown,
+            )
+            print(f"[TESTING MARKDOWN SOURCE] {paper_id}: {ctx.display_path(markdown_path)}")
+            final_output = run_markdown_processing(markdown_path, **common_processing_kwargs)
+        else:
+            final_output = run_pdf_processing(
+                pdf_path,
+                **common_processing_kwargs,
+                markdown_batches_dir=paper_dir / "markdown_batches",
+            )
+        markdown_batch_outputs = write_markdown_batch_debug_for_markdown(
+            paper_dir / "paper.md",
+            paper_dir / "markdown_batches",
+            max_batches=args.max_batches,
+        )
+        print(f"[TESTING MARKDOWN BATCHES] {paper_id}: {len(markdown_batch_outputs)}")
+        processed_output = paper_dir / "paper.processed.json"
+        evidence_input = processed_output if processed_output.exists() else final_output
+        evidence_output = run_pdf_evidence(
+            evidence_input,
+            output_dir=output_dir,
+            model=args.evidence_model,
+            skip_existing=args.skip_existing_evidence,
+            llm_client=llm_client,
+            prompt_registry=prompt_registry,
+            prompt_label=ctx.PROMPT_LABEL,
+        )
+        print(f"[TESTING DONE] {paper_id}: {ctx.display_path(evidence_output)}")
 
 
 def cmd_data_layout_create(args: argparse.Namespace) -> None:
@@ -227,27 +319,6 @@ def cmd_data_layout_create(args: argparse.Namespace) -> None:
     print("Data layout dry-run" if args.dry_run else "Data layout ensured")
     for directory in created_dirs:
         print(f"- {ctx.display_path(directory)}")
-
-
-def _add_shared_claims_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=None,
-        help=f"Modelo (default config llm_to_claim.model: {ctx.LLM_CLAIMS_MODEL})",
-    )
-    parser.add_argument(
-        "--max-claims",
-        type=int,
-        default=None,
-        help="Fixed max claims override (default auto: base 10 + extras)",
-    )
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=None,
-        help=f"Temperature (default config llm_to_claim.temperature: {ctx.LLM_CLAIMS_TEMPERATURE})",
-    )
 
 
 def _add_metadata_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -412,6 +483,7 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
         help="Convierte PDF con Docling, procesa batches con LLM y genera paper.final.json",
     )
     run_parser.add_argument("--pdf", type=Path, default=None, help="PDF cientifico puntual de entrada")
+    run_parser.add_argument("--markdown", type=Path, default=None, help="paper.md puntual de entrada")
     run_parser.add_argument(
         "--input-dir",
         type=Path,
@@ -506,54 +578,118 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     )
     markdown_parser.set_defaults(handler=cmd_pdf_processing_markdown)
 
-
-def _add_claims_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    claims_parser = subparsers.add_parser(
-        "claims",
-        help="Extraccion de claims desde *.final.json",
+    evidence_parser = pdf_processing_subparsers.add_parser(
+        "evidence",
+        help="Genera trimmed.json, experiment_map.json y canonical_evidence.json desde paper.processed.json",
     )
-    claims_subparsers = claims_parser.add_subparsers(dest="claims_command")
-
-    claims_extract_parser = claims_subparsers.add_parser(
-        "extract",
-        help=(
-            f"Extrae claims desde {ctx.display_path(ctx.CLAIMS_INPUT_DIR)} "
-            f"hacia {ctx.display_path(ctx.CLAIMS_OUTPUT_DIR)}"
-        ),
-    )
-    claims_extract_parser.add_argument(
+    evidence_parser.add_argument(
         "--input",
         type=Path,
-        default=None,
-        help="Archivo final JSON o directorio de entrada (default config llm_to_claim.input_dir)",
-    )
-    claims_extract_parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Archivo/directorio de salida (default config llm_to_claim.output_dir)",
-    )
-    _add_shared_claims_args(claims_extract_parser)
-    claims_extract_parser.add_argument(
-        "--pattern",
-        type=str,
-        default="*/*.final.json",
-        help="Glob pattern cuando --input es directorio",
-    )
-    claims_extract_parser.add_argument(
-        "--auto-approve-under-7000-tokens",
-        action="store_true",
+        default=defaults.output_dir,
         help=(
-            "Procesa automaticamente solo archivos con estimated_input_tokens "
-            f"menor a {ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS}"
+            "Archivo paper.processed.json o directorio de artefactos PDF-processing "
+            f"(default: {ctx.display_path(defaults.output_dir)})"
         ),
     )
-    claims_extract_parser.add_argument(
+    evidence_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help=f"Directorio de evidencia (default: {ctx.display_path(ctx.EVIDENCE_OUTPUT_DIR)})",
+    )
+    evidence_parser.add_argument(
+        "--pattern",
+        default="*/paper.processed.json",
+        help='Patron glob cuando --input es directorio (default: "*/paper.processed.json")',
+    )
+    evidence_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cantidad maxima de papers a procesar cuando --input es directorio",
+    )
+    evidence_parser.add_argument("--model", default=None, help="Modelo LLM alternativo para evidence")
+    evidence_parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Salta archivos cuyo *.claims.json de salida ya existe",
+        help="Salta papers con canonical_evidence.json existente",
     )
-    claims_extract_parser.set_defaults(handler=cmd_claims_extract)
+    evidence_parser.set_defaults(handler=cmd_pdf_processing_evidence)
+
+    testing_parser = pdf_processing_subparsers.add_parser(
+        "testing",
+        help="Ejecuta PDF-processing completo en data/testing/<paper_id>",
+        description=(
+            "Ejecuta el flujo completo de testing por paper: copia source.pdf, "
+            "crea paper.md con Docling, estructura con LLM y genera evidence."
+        ),
+    )
+    testing_parser.add_argument(
+        "--pdf-dir",
+        type=Path,
+        default=defaults.input_dir,
+        help=f"Directorio de PDFs fuente (default: {ctx.display_path(defaults.input_dir)})",
+    )
+    testing_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=ctx.TESTING_ROOT_DIR,
+        help=f"Directorio testing destino (default: {ctx.display_path(ctx.TESTING_ROOT_DIR)})",
+    )
+    testing_parser.add_argument(
+        "--markdown-dir",
+        type=Path,
+        default=defaults.output_dir,
+        help=f"Directorio con <paper_id>/paper.md para --reuse-markdown (default: {ctx.display_path(defaults.output_dir)})",
+    )
+    testing_parser.add_argument(
+        "--paper-id",
+        action="append",
+        default=None,
+        help="Paper puntual a procesar. Puede repetirse. Si se omite, usa todos los PDFs de --pdf-dir.",
+    )
+    testing_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cantidad maxima de papers a procesar cuando no se especifica --paper-id.",
+    )
+    testing_parser.add_argument(
+        "--overwrite-source",
+        action="store_true",
+        help="Sobrescribe source.pdf existente en testing.",
+    )
+    testing_parser.add_argument(
+        "--reuse-markdown",
+        action="store_true",
+        help="Copia paper.md existente desde --markdown-dir y evita ejecutar Docling.",
+    )
+    testing_parser.add_argument(
+        "--overwrite-markdown",
+        action="store_true",
+        help="Sobrescribe paper.md existente en testing cuando se usa --reuse-markdown.",
+    )
+    testing_parser.add_argument("--prompt-first-batch", type=Path, default=None, help="Prompt alternativo para primer batch")
+    testing_parser.add_argument(
+        "--prompt-continuation-batch",
+        type=Path,
+        default=None,
+        help="Prompt alternativo para batches de continuacion",
+    )
+    testing_parser.add_argument("--force-markdown", action="store_true", help="Regenera Markdown Docling existente")
+    testing_parser.add_argument(
+        "--max-batches",
+        type=int,
+        default=None,
+        help="Cantidad maxima de batches Markdown a procesar para este PDF",
+    )
+    testing_parser.add_argument("--evidence-model", default=None, help="Modelo LLM alternativo para evidence")
+    testing_parser.add_argument(
+        "--skip-existing-evidence",
+        action="store_true",
+        help="Salta papers con canonical_evidence.json existente",
+    )
+    testing_parser.set_defaults(handler=cmd_pdf_processing_testing)
 
 
 def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -605,7 +741,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_bib_group(subparsers)
     _add_pdfs_group(subparsers)
     _add_pdf_processing_group(subparsers)
-    _add_claims_group(subparsers)
     _add_bridge_group(subparsers)
     _add_data_layout_group(subparsers)
 

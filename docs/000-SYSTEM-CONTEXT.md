@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-SYSTEM-CONTEXT
 title: Victus Processing System Context
 status: active
-updated_at: 2026-05-27
+updated_at: 2026-06-03
 ---
 
 # System Context
@@ -10,11 +10,12 @@ updated_at: 2026-05-27
 ## 1. Purpose
 
 `victus-processing` exists to turn scientific-paper inputs into local,
-inspectable processing artifacts for the Victus ecosystem.
+inspectable evidence-processing artifacts for the Victus ecosystem.
 
-It owns the local workflow from paper metadata and PDFs to structured paper
-outputs and extracted claims. The repository is optimized for reproducible
-batch processing, explicit artifact ownership, and agent-readable documentation.
+It owns the local workflow from paper metadata and PDFs to structured blocks,
+trimmed evidence inputs, experiment maps, and canonical evidence. The
+repository is optimized for reproducible batch processing, explicit artifact
+ownership, and agent-readable documentation.
 
 ## 2. System Goals
 
@@ -42,7 +43,7 @@ This repository owns:
 - metadata discovery and candidate state;
 - PDF normalization into active processing inputs;
 - Docling/LLM PDF-processing artifacts;
-- LLM claim extraction outputs;
+- LLM evidence extraction outputs;
 - local contracts for artifacts, paths, and stage handoffs.
 
 This repository does not own:
@@ -64,7 +65,8 @@ Primary hubs:
 - [Contracts](300-CONTRACTS.md): storage paths, environment variables, data layout,
   and identity contracts.
 - [Contract details](contracts/): source-of-truth contracts for data layout,
-  configuration/CLI, stage handoffs, artifact schemas, and claims schema.
+  configuration/CLI, stage handoffs, artifact schemas, blocks, experiment maps,
+  and canonical evidence.
 - [CLI operations](operations/cli.md): command groups and common command flow.
 - [PDF processing operations](operations/pdf-processing.md): runtime details
   specific to PDF-processing flow.
@@ -87,8 +89,13 @@ Planned documentation structure:
 - **Stage:** explicit processing step invoked by CLI command.
 - **Artifact:** durable file produced or consumed by a stage.
 - **Active PDF:** normalized PDF ready for PDF processing.
-- **Structured paper JSON:** merged extracted paper representation.
-- **Claim:** validated empirical statement extracted from structured paper JSON.
+- **Structured block:** smallest stable unit for preserving scientific text,
+  document location, order, context, and content kind.
+- **Trimmed paper JSON:** evidence-stage handoff containing only metadata and
+  blocks from evidence-relevant scientific sections.
+- **Experiment Map:** block-id grouping produced by `experiment_scope_mapper`.
+- **Canonical Evidence:** normalized, traceable evidence record extracted from
+  metadata, blocks, and an experiment map.
 - **Runtime layout:** local directory structure under `data/`.
 - **Bridge:** optional integration surface for Victus infrastructure.
 

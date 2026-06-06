@@ -3,7 +3,7 @@
 Local paper-processing pipeline for the Victus ecosystem.
 
 This repository turns scientific-paper inputs into metadata, normalized PDFs,
-structured PDF-processing artifacts, and claim outputs. It owns the local
+structured PDF-processing artifacts, and canonical evidence outputs. It owns the local
 processing workflow and the `data/` artifact layout used between stages.
 
 [Español](docs/README.es.md)
@@ -35,7 +35,7 @@ Run the main local flow:
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --skip-existing
+uv run victus-processing pdf-processing evidence
 ```
 
 ## Validate
@@ -61,7 +61,7 @@ This repository owns:
 - metadata discovery and candidate state;
 - PDF normalization into active processing inputs;
 - Docling/LLM PDF processing artifacts;
-- LLM claim extraction outputs via LiteLLM;
+- LLM canonical evidence extraction outputs via LiteLLM;
 - local runtime contracts under `data/`.
 
 This repository does not own:

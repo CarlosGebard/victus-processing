@@ -29,7 +29,7 @@ DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "02-pdfs"
 DATA_RUNTIME_PDFS_ACTIVE_DIR = DATA_RUNTIME_PDFS_DIR / "active"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
 DATA_RUNTIME_PDF_PROCESSING_DIR = DATA_RUNTIME_DIR / "03-pdf_processing"
-DATA_RUNTIME_CLAIMS_DIR = DATA_RUNTIME_DIR / "04-claims_by_model"
+DATA_RUNTIME_EVIDENCE_DIR = DATA_RUNTIME_DIR / "04-evidence"
 DATA_RUNTIME_TMP_DIR = DATA_RUNTIME_DIR / "tmp"
 DATA_RUNTIME_LOGS_DIR = DATA_RUNTIME_DIR / "logs"
 DATA_RUNTIME_QUEUES_DIR = DATA_RUNTIME_DIR / "queues"
@@ -138,7 +138,6 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
 
     storage_cfg = cfg.get("storage") or {}
     docling_cfg = cfg.get("docling_ingestion") or {}
-    llm_claims_cfg = cfg.get("llm_to_claim") or {}
 
     metadata_dir = resolve_project_path(
         storage_cfg.get("papers_dir"),
@@ -169,13 +168,9 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
         docling_cfg.get("output_dir"),
         DATA_RUNTIME_DOCLING_DIR,
     )
-    claims_input_dir = resolve_project_path(
-        llm_claims_cfg.get("input_dir"),
-        docling_heuristics_dir,
-    )
-    claims_output_dir = resolve_project_path(
-        llm_claims_cfg.get("output_dir"),
-        DATA_RUNTIME_CLAIMS_DIR,
+    evidence_output_dir = resolve_project_path(
+        (cfg.get("evidence") or {}).get("output_dir"),
+        DATA_RUNTIME_EVIDENCE_DIR,
     )
 
     return {
@@ -186,8 +181,7 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
         "unmatched_pdf_dir": unmatched_pdf_dir,
         "docling_input_dir": docling_input_dir,
         "docling_heuristics_dir": docling_heuristics_dir,
-        "claims_input_dir": claims_input_dir,
-        "claims_output_dir": claims_output_dir,
+        "evidence_output_dir": evidence_output_dir,
     }
 
 
@@ -203,15 +197,9 @@ def get_testing_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
         testing_cfg.get("docling_output_dir"),
         testing_root_dir / "docling",
     )
-    testing_claims_dir = resolve_project_path(
-        testing_cfg.get("claims_output_dir"),
-        testing_root_dir / "claims",
-    )
-
     return {
         "testing_root_dir": testing_root_dir,
         "testing_docling_dir": testing_docling_dir,
-        "testing_claims_dir": testing_claims_dir,
     }
 
 
@@ -233,12 +221,6 @@ def get_exploration_completed_seed_doi_file(config: dict[str, Any] | None = None
     )
 
 
-def get_claims_auto_approve_max_tokens(config: dict[str, Any] | None = None) -> int:
-    cfg = config if config is not None else get_config()
-    claims_cfg = cfg.get("llm_to_claim") or {}
-    return int(claims_cfg.get("auto_approve_max_tokens", 7000))
-
-
 def get_data_layout_dirs() -> tuple[Path, ...]:
     dirs = (
         DATA_DIR,
@@ -257,7 +239,8 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_RUNTIME_PDFS_DIR,
         DATA_RUNTIME_PDFS_ACTIVE_DIR,
         DATA_RUNTIME_PDF_PROCESSING_DIR,
-        DATA_RUNTIME_CLAIMS_DIR,
+        DATA_RUNTIME_EVIDENCE_DIR,
+        TESTING_ROOT_DIR,
         DATA_REPORTS_DIR,
         DATA_REPORTS_AUDITS_DIR,
         PRE_INGESTION_EDITABLE_DIR,
@@ -266,7 +249,7 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DOCLING_INPUT_DIR,
         UNMATCHED_PDF_DIR,
         DOCLING_HEURISTICS_DIR,
-        CLAIMS_OUTPUT_DIR,
+        EVIDENCE_OUTPUT_DIR,
         REGISTRY_DIR,
         RAW_PDF_DIR,
     )
@@ -282,6 +265,8 @@ def get_env_or_config(
     env_value = os.getenv(env_name)
     if env_value:
         return env_value
+    if not config_path:
+        return default
 
     cfg = config if config is not None else get_config()
     current: Any = cfg
@@ -301,8 +286,7 @@ PATHS = get_pipeline_paths(CONFIG)
 METADATA_DIR = PATHS["metadata_dir"]
 DOCLING_INPUT_DIR = PATHS["docling_input_dir"]
 DOCLING_HEURISTICS_DIR = PATHS["docling_heuristics_dir"]
-CLAIMS_INPUT_DIR = PATHS["claims_input_dir"]
-CLAIMS_OUTPUT_DIR = PATHS["claims_output_dir"]
+EVIDENCE_OUTPUT_DIR = PATHS["evidence_output_dir"]
 REGISTRY_DIR = PATHS["registry_dir"]
 RAW_PDF_DIR = PATHS["raw_pdf_dir"]
 UNMATCHED_PDF_DIR = PATHS["unmatched_pdf_dir"]
@@ -311,13 +295,19 @@ EXPLORATION_COMPLETED_SEED_DOI_FILE = get_exploration_completed_seed_doi_file(CO
 TESTING_PATHS = get_testing_paths(CONFIG)
 TESTING_ROOT_DIR = TESTING_PATHS["testing_root_dir"]
 TESTING_DOCLING_DIR = TESTING_PATHS["testing_docling_dir"]
-TESTING_CLAIMS_DIR = TESTING_PATHS["testing_claims_dir"]
-
-LLM_CLAIMS_CFG = CONFIG.get("llm_to_claim") or {}
-LLM_CLAIMS_MODEL = str(LLM_CLAIMS_CFG.get("model", "gpt-5-mini"))
-LLM_CLAIMS_MAX = int(LLM_CLAIMS_CFG.get("max_claims", 10))
-LLM_CLAIMS_TEMPERATURE = float(LLM_CLAIMS_CFG.get("temperature", 0.0))
-LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS = get_claims_auto_approve_max_tokens(CONFIG)
+LANGFUSE_PUBLIC_KEY = get_env_or_config("LANGFUSE_PUBLIC_KEY", default="")
+LANGFUSE_SECRET_KEY = get_env_or_config("LANGFUSE_SECRET_KEY", default="")
+LANGFUSE_HOST = get_env_or_config("LANGFUSE_HOST", default="")
+PROMPT_LABEL = get_env_or_config("PROMPT_LABEL", default="production") or "production"
+PROMPTS_LOCAL_DIR = resolve_project_path(
+    get_env_or_config("PROMPTS_LOCAL_DIR", default="src/prompts/local"),
+    ROOT_DIR / "src/prompts/local",
+)
+DEFAULT_LLM_MODEL = (
+    get_env_or_config("DEFAULT_LLM_MODEL", default="litellm_proxy/gemini-flash-lite")
+    or "litellm_proxy/gemini-flash-lite"
+)
+DEFAULT_LLM_MAX_TOKENS = int(get_env_or_config("DEFAULT_LLM_MAX_TOKENS", default="4096") or "4096")
 
 REGISTRY_FILE = REGISTRY_DIR / "documents.jsonl"
 BIB_OUTPUT_FILE = METADATA_DIR / "papers.bib"
@@ -347,10 +337,3 @@ def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[in
     from src.application.pdf_extraction.normalization import sync_raw_pdfs_into_input
 
     return sync_raw_pdfs_into_input
-
-
-@lru_cache(maxsize=1)
-def resolve_claims_flow() -> Callable[..., tuple[int, int, int]]:
-    from src.application.claims.extraction import run_claim_extraction_flow
-
-    return run_claim_extraction_flow

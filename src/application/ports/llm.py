@@ -13,6 +13,7 @@ class LLMRequest:
     model: str
     messages: list[LLMMessage]
     temperature: float | None = None
+    max_tokens: int | None = None
     response_format: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 

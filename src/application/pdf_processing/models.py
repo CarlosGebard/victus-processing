@@ -19,6 +19,7 @@ class PdfProcessingConfig:
     markdown_batch_soft_limit_chars: int = 9000
     markdown_batch_hard_limit_chars: int = 14000
     max_batches: int | None = None
+    max_tokens: int | None = None
     request_timeout_seconds: float = 120.0
 
 
@@ -113,4 +114,9 @@ class MarkdownBatchOutput(BaseModel):
     batch_warnings: BatchWarnings = Field(default_factory=BatchWarnings)
 
     def as_clean_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
+        return self.model_dump(
+            mode="json",
+            exclude={"current_section", "batch_warnings"},
+            exclude_none=True,
+            exclude_unset=True,
+        )

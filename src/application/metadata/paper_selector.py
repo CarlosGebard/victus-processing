@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from src.application.ports.llm import LLMClient, LLMRequest
+from src.application.ports.prompt_registry import PromptRegistry, PromptSpec
+from src.infrastructure.prompts.compile import compile_template
 from src.prompts import (
     build_paper_selector_user_prompt,
     get_paper_selector_system_prompt,
@@ -201,16 +203,29 @@ def classify_papers_with_llm(
     *,
     selection_profile: str = "broad-nutrition",
     client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
     dotenv_path: str | Path = DEFAULT_DOTENV_PATH,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    prompt_name = "paper-selector-dataset-gaps" if selection_profile == "dataset-gaps" else "paper-selector"
+    prompt_spec: PromptSpec | None = None
+    system_prompt = get_paper_selector_system_prompt(selection_profile)
+    if prompt_registry is not None:
+        prompt_spec = prompt_registry.get(prompt_name, label=prompt_label)
+        system_prompt = compile_template(prompt_spec.template, {})
+    prompt_config = prompt_spec.config if prompt_spec else {}
+    effective_model = str(prompt_config.get("model") or model)
+    effective_temperature = prompt_config.get("temperature")
     response = client.complete(
         LLMRequest(
             operation="metadata.paper_selection",
-            model=model,
+            model=effective_model,
             messages=[
-                {"role": "system", "content": get_paper_selector_system_prompt(selection_profile)},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": build_user_prompt(candidates)},
             ],
+            temperature=effective_temperature,
+            max_tokens=prompt_config.get("max_tokens"),
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -219,7 +234,14 @@ def classify_papers_with_llm(
                     "schema": OUTPUT_SCHEMA["schema"],
                 },
             },
-            metadata={"selection_profile": selection_profile, "candidate_count": len(candidates)},
+            metadata={
+                "selection_profile": selection_profile,
+                "candidate_count": len(candidates),
+                "prompt_name": prompt_spec.name if prompt_spec else f"legacy.{prompt_name}",
+                "prompt_version": prompt_spec.version if prompt_spec else None,
+                "prompt_label": prompt_label,
+                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+            },
         )
     )
     decisions = normalize_decisions_text(response.text, candidates)

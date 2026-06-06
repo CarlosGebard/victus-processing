@@ -11,23 +11,8 @@ def _read_prompt(filename: str) -> str:
     return resources.files(__package__).joinpath(filename).read_text(encoding="utf-8")
 
 
-CLAIMS_PROMPT_TEMPLATE = _read_prompt("claims.md")
 PAPER_SELECTOR_SYSTEM_PROMPT = _read_prompt("paper_selector_system.md")
 PAPER_SELECTOR_GAP_SYSTEM_PROMPT = _read_prompt("paper_selector_dataset_gaps_system.md")
-
-
-def build_claims_prompt(
-    trace_text: str,
-    sections_text: str,
-    max_claims: int,
-    available_sections: str,
-) -> str:
-    return (
-        CLAIMS_PROMPT_TEMPLATE.replace("{trace_text}", trace_text)
-        .replace("{sections_text}", sections_text)
-        .replace("{max_claims}", str(max_claims))
-        .replace("{available_sections}", available_sections)
-    )
 
 
 def get_paper_selector_system_prompt(selection_profile: str = "broad-nutrition") -> str:
@@ -56,10 +41,8 @@ def build_paper_selector_user_prompt(candidates: list["PaperCandidate"]) -> str:
     )
 
 __all__ = [
-    "CLAIMS_PROMPT_TEMPLATE",
     "PAPER_SELECTOR_GAP_SYSTEM_PROMPT",
     "PAPER_SELECTOR_SYSTEM_PROMPT",
-    "build_claims_prompt",
     "build_paper_selector_user_prompt",
     "get_paper_selector_system_prompt",
 ]

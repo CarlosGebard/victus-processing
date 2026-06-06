@@ -1,4 +1,2 @@
 testing:
-  root_dir: "data/reports/audits/testing"
-  docling_output_dir: "data/reports/audits/testing/docling"
-  claims_output_dir: "data/reports/audits/testing/claims"
+  root_dir: "data/testing"

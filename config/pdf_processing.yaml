@@ -1,12 +1,20 @@
 pdf_processing:
-  model: "gpt-5-mini"
+  model: "litellm_proxy/gemini-flash-lite"
   input_dir: "data/runtime/02-pdfs/active"
   output_dir: "data/runtime/03-pdf_processing"
   workers: 1
   prompt_first_batch: "src/prompts/md_to_json_first.md"
   prompt_continuation_batch: "src/prompts/md_to_json_next.md"
-  markdown_batch_chars: 6000
-  markdown_batch_soft_limit_chars: 9000
-  markdown_batch_hard_limit_chars: 14000
+  markdown_batch_chars: 10000
+  markdown_batch_soft_limit_chars: 14000
+  markdown_batch_hard_limit_chars: 20000
   max_batches: null
+  max_tokens: null
   request_timeout_seconds: 120
+
+evidence:
+  output_dir: "data/runtime/04-evidence"
+  model: "litellm_proxy/gemini-flash-lite"
+  prompt_paper_classifier: "src/prompts/paper_classifier.md"
+  prompt_experiment_scope_mapper: "src/prompts/experiment_scope_mapper.md"
+  prompt_canonical_evidence: "src/prompts/canonical_evidence.md"

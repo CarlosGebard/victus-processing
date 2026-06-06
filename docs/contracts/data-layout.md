@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
 title: Victus Processing Data Layout Contract
 status: source-of-truth
-updated_at: 2026-05-27
+updated_at: 2026-06-06
 owners:
   - architecture
 related_components:
@@ -11,11 +11,12 @@ related_components:
   - src.application.metadata
   - src.application.pdf_extraction
   - src.application.pdf_processing
-  - src.application.claims
+  - src.application.evidence
   - src.application.ports.llm
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
   - VICTUS-PROCESSING-ARCHITECTURE
+  - VICTUS-PROCESSING-TESTING-PIPELINE-CONTRACT
 tags:
   - contracts
   - data-layout
@@ -58,7 +59,8 @@ Not covered:
 - Pre-PDF candidate state lives under `data/runtime/01-candidates/`.
 - Active PDFs live under `data/runtime/02-pdfs/active/` by default.
 - PDF-processing artifacts live under `data/runtime/03-pdf_processing/`.
-- Claim outputs live under `data/runtime/04-claims_by_model/`.
+- Evidence outputs live under `data/runtime/04-evidence/`.
+- Testing review artifacts live under `data/testing/`.
 - Registry artifacts live under `data/registry/`.
 - Report and audit artifacts live under `data/reports/`.
 - `data/` is runtime state and must not be treated as disposable source code.
@@ -87,15 +89,32 @@ data/
         paper.final.json
       processing_status.jsonl
       markdown_status.jsonl
-    04-claims_by_model/
-      {model_slug}/
-        {paper_id}.claims.json
+    04-evidence/
+      {paper_id}/
+        trimmed.json
+        experiment_map.json
+        canonical_evidence.json
     tmp/
     logs/
     queues/
   reports/
     audits/
     exports/
+  testing/
+    {paper_id}/
+      source.pdf
+      paper.md
+      markdown_batches/
+      raw_batches/
+      paper.processed.json
+      paper.final.json
+      paper.classifier_input.json
+      paper.classification.json
+      evidence_skipped.json
+      trimmed.json
+      experiment_map.json
+      experiment_packets.json
+      canonical_evidence.json
   archive/
     legacy/
     experiments/
@@ -120,16 +139,14 @@ layout above unless an explicit compatibility task requires the legacy path.
   `data/runtime/03-pdf_processing/{paper_id}/`.
 - PDF-processing must not write one paper's artifacts into another paper's
   directory.
-- The merged structured paper output is `paper.processed.json`; the trimmed
-  handoff artifact is `paper.final.json`.
+- The merged structured paper output is `paper.processed.json`; the current
+  compatibility trimmed artifact is `paper.final.json`.
 - `paper.json` is a legacy PDF-processing final output name. When encountered,
   the current pipeline renames it to `paper.processed.json` if the canonical
   output is absent.
 - Raw LLM batch outputs are retained under `raw_batches/`.
 - Stage status files are operational state, not disposable debug logs.
-- Claim outputs are grouped by model.
-- Claim output model directory names use lowercase model slugs with `/` and
-  spaces replaced by `_`.
+- Evidence outputs are grouped by `paper_id`.
 - The registry file for document artifacts is `data/registry/documents.jsonl`.
 - DOI slugs are lowercase and replace characters outside `[a-z0-9._-]` with
   `-`.
@@ -162,11 +179,21 @@ layout above unless an explicit compatibility task requires the legacy path.
   `markdown_status.jsonl`.
 - **Identity:** `paper_id` equals the input PDF stem.
 
-### Claims
+### Evidence
 
-- **Input:** structured paper JSON accepted by the claims parser.
-- **Output:** `{paper}.claims.json` under model-specific output directories.
-- **Identity:** output stem is derived from the input JSON filename.
+- **Input:** structured paper metadata and blocks.
+- **Output:** `trimmed.json`, `experiment_map.json`, and
+  `canonical_evidence.json` under `data/runtime/04-evidence/{paper_id}/`.
+- **Identity:** `paper_id` follows the post-PDF artifact identity; evidence
+  records remain traceable through block identifiers.
+
+### Testing Review Artifacts
+
+- **Input:** active PDFs.
+- **Output:** `source.pdf`, `paper.md`, Markdown batch debug artifacts,
+  PDF-processing artifacts, and evidence artifacts under
+  `data/testing/{paper_id}/`.
+- **Identity:** `paper_id` equals the active PDF filename stem.
 
 ## 6. Failure Expectations
 

@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
 status: active
-updated_at: 2026-05-27
+updated_at: 2026-06-03
 owners:
   - architecture
 related_docs:
@@ -87,22 +87,25 @@ files, not hidden in memory or remote services.
 - **Dependencies:** Docling, internal LLM client port.
 - **Boundary:** owns post-PDF structured paper artifacts.
 
-### Claims Stage
+### Evidence Stages
 
-- **Path:** `src/application/claims/`
-- **Responsibility:** extract validated empirical claims from structured paper
-  JSON.
-- **Inputs:** structured paper JSON, claim prompt, model configuration.
-- **Outputs:** model-specific claims JSON.
+- **Path:** planned under `src/application/`.
+- **Responsibility:** trim structured blocks, map explicit experimental scopes,
+  and extract canonical evidence.
+- **Inputs:** metadata, blocks, experiment-scope prompt outputs, canonical
+  evidence prompt outputs.
+- **Outputs:** trimmed paper JSON, experiment map JSON, canonical evidence JSON.
 - **Dependencies:** internal LLM client port.
-- **Boundary:** owns claim extraction outputs, not downstream analytics.
+- **Boundary:** owns paper-level evidence normalization, not downstream
+  retrieval, synthesis, recommendations, or analytics.
 
 ### Prompt Assets
 
 - **Path:** `src/prompts/`
 - **Responsibility:** store model instructions used by LLM-mediated stages.
 - **Inputs:** repository-authored prompt text.
-- **Outputs:** prompt content consumed by metadata, PDF-processing, and claims.
+- **Outputs:** prompt content consumed by metadata, PDF-processing, and
+  evidence stages.
 - **Dependencies:** none.
 - **Boundary:** prompts shape behavior but do not execute stages directly.
 
@@ -114,7 +117,8 @@ Internal boundaries:
 - Configuration/path resolution is separated from processing logic.
 - Metadata is pre-PDF state.
 - PDF-processing is post-PDF structured extraction.
-- Claims are downstream derived outputs.
+- Canonical evidence is the downstream derived output owned by this repository.
+- Canonical evidence is the active downstream extraction terminology.
 - Prompts are separate artifacts consumed by model-mediated stages.
 
 External boundaries:
@@ -140,8 +144,10 @@ seed DOI or DOI argument
   -> active PDF
   -> PDF processing
   -> structured paper JSON
-  -> claims extraction
-  -> claims JSON
+  -> trimming
+  -> experiment scope mapping
+  -> canonical evidence extraction
+  -> canonical evidence JSON
 ```
 
 The CLI is the orchestrating boundary. It does not run every stage
@@ -156,7 +162,7 @@ data/inputs/
   -> data/runtime/01-candidates/
   -> data/runtime/02-pdfs/active/
   -> data/runtime/03-pdf_processing/
-  -> data/runtime/04-claims_by_model/
+  -> data/runtime/04-evidence/
 ```
 
 Artifact roles:
@@ -164,9 +170,10 @@ Artifact roles:
 - `data/inputs/`: seed queues, rules, and imports.
 - `data/runtime/01-candidates/`: pre-PDF metadata state.
 - `data/runtime/02-pdfs/active/`: normalized PDFs ready for processing.
-- `data/runtime/03-pdf_processing/`: Markdown, raw batches, merged paper JSON,
-  and processing status.
-- `data/runtime/04-claims_by_model/`: extracted claims grouped by model.
+- `data/runtime/03-pdf_processing/`: Markdown, raw batches, structured block
+  artifacts, and processing status.
+- `data/runtime/04-evidence/`: trimmed block inputs, experiment maps, and
+  canonical evidence artifacts.
 
 Detailed path, handoff, configuration, CLI, and schema contracts live in
 [Contracts](300-CONTRACTS.md).

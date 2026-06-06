@@ -4,31 +4,9 @@ import pytest
 
 from src.application.metadata.paper_selector import PaperCandidate
 from src.prompts import (
-    CLAIMS_PROMPT_TEMPLATE,
-    build_claims_prompt,
     build_paper_selector_user_prompt,
     get_paper_selector_system_prompt,
 )
-
-
-def test_claims_prompt_template_loads_from_markdown() -> None:
-    assert "MAX_CLAIMS = {max_claims}" in CLAIMS_PROMPT_TEMPLATE
-    assert "[TRACE]" in CLAIMS_PROMPT_TEMPLATE
-    assert "[SECTIONS]" in CLAIMS_PROMPT_TEMPLATE
-
-
-def test_build_claims_prompt_renders_variables() -> None:
-    prompt = build_claims_prompt(
-        trace_text="trace body",
-        sections_text="section body",
-        max_claims=3,
-        available_sections="Intro, Results",
-    )
-
-    assert "MAX_CLAIMS = 3" in prompt
-    assert "AVAILABLE_SECTIONS = Intro, Results" in prompt
-    assert "trace body" in prompt
-    assert "section body" in prompt
 
 
 def test_paper_selector_user_prompt_renders_candidate_blocks() -> None:

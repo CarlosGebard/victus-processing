@@ -108,7 +108,7 @@ def artifact_paths_for_base_name(base_name: str) -> dict[str, Path]:
         "docling_json": bundle_dir / f"{base_name}.json",
         "filtered_json": bundle_dir / f"{base_name}.filtered.json",
         "final_json": bundle_dir / f"{base_name}.final.json",
-        "claims": ctx.CLAIMS_OUTPUT_DIR / f"{base_name}.claims.json",
+        "evidence": ctx.EVIDENCE_OUTPUT_DIR / base_name / "canonical_evidence.json",
     }
 
 
@@ -211,7 +211,7 @@ def mirror_artifact_paths_for_base_name(base_name: str) -> dict[str, Path] | Non
         "docling_json": paper_dir / "docling" / "full.json",
         "filtered_json": paper_dir / "docling" / "filtered.json",
         "final_json": paper_dir / "docling" / "final.json",
-        "claims": paper_dir / "claims" / "claims.json",
+        "evidence": paper_dir / "evidence" / "canonical_evidence.json",
     }
 
 
@@ -232,12 +232,12 @@ def artifact_stage_status(paths: dict[str, Path]) -> dict[str, bool]:
         "pdf": paths["pdf"].exists(),
         "docling": paths["docling_json"].exists(),
         "heuristics": paths["filtered_json"].exists() and paths["final_json"].exists(),
-        "claims": paths["claims"].exists(),
+        "evidence": paths["evidence"].exists(),
         "completed": (
             paths["docling_json"].exists()
             and paths["filtered_json"].exists()
             and paths["final_json"].exists()
-            and paths["claims"].exists()
+            and paths["evidence"].exists()
         ),
     }
 
@@ -267,24 +267,6 @@ def upsert_registry_record(metadata: dict[str, Any], base_name: str) -> dict[str
 
 def refresh_registry_record(document_id: str, doi: str, base_name: str) -> dict[str, Any]:
     return upsert_registry_record({"document_id": document_id, "doi": doi}, base_name)
-
-
-def record_claims_run(
-    *,
-    document_id: str,
-    doi: str,
-    base_name: str,
-    claims_run: dict[str, Any],
-) -> dict[str, Any]:
-    upsert_registry_record({"document_id": document_id, "doi": doi}, base_name)
-    records = load_registry()
-    key = registry_key_for_doi(doi)
-    entry = records.get(key, {})
-    entry["claims_run"] = claims_run
-    entry["updated_at"] = utc_now_iso()
-    records[key] = entry
-    save_registry(records)
-    return entry
 
 
 def _find_registry_record(document_id: str | None, doi_slug: str) -> dict[str, Any] | None:

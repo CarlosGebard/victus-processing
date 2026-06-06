@@ -35,7 +35,8 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("pdf-processing", "--help"),
         ("pdf-processing", "run", "--help"),
         ("pdf-processing", "markdown", "--help"),
-        ("claims", "extract", "--help"),
+        ("pdf-processing", "evidence", "--help"),
+        ("pdf-processing", "testing", "--help"),
         ("bridge", "--help"),
         ("data-layout", "create", "--help"),
     ],
@@ -51,7 +52,7 @@ def test_main_help_exposes_domain_contract_groups() -> None:
     result = run_cli("--help")
 
     assert result.returncode == 0
-    for group in ("metadata", "bib", "pdfs", "pdf-processing", "claims", "bridge", "data-layout"):
+    for group in ("metadata", "bib", "pdfs", "pdf-processing", "bridge", "data-layout"):
         assert group in result.stdout
 
 
@@ -60,7 +61,7 @@ def test_main_prints_help_when_no_command(capsys) -> None:
     parser.print_help()
     captured = capsys.readouterr()
     assert "metadata" in captured.out
-    assert "claims" in captured.out
+    assert "pdf-processing" in captured.out
 
 
 def test_main_routes_metadata_explore(monkeypatch) -> None:
@@ -130,45 +131,6 @@ def test_main_routes_bib_generate(monkeypatch, tmp_path: Path) -> None:
     assert called == [(output.resolve(), input_csv.resolve())]
 
 
-def test_main_routes_claims_extract(monkeypatch, tmp_path: Path) -> None:
-    called: list[dict[str, object]] = []
-    input_path = tmp_path / "input"
-    output_path = tmp_path / "output"
-
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "cli.py",
-            "claims",
-            "extract",
-            "--input",
-            str(input_path),
-            "--output",
-            str(output_path),
-            "--skip-existing",
-            "--auto-approve-under-7000-tokens",
-        ],
-    )
-    monkeypatch.setattr(cli, "run_llm_to_claim_flow", lambda **kwargs: called.append(kwargs))
-
-    cli.main()
-
-    assert called == [
-        {
-            "input_path": input_path,
-            "output_path": output_path,
-            "model": None,
-            "max_claims": None,
-            "temperature": None,
-            "pattern": "*/*.final.json",
-                "auto_approve_max_tokens": cli.ctx.LLM_CLAIMS_AUTO_APPROVE_MAX_TOKENS,
-                "skip_existing": True,
-                "llm_client": called[0]["llm_client"],
-            }
-        ]
-
-
 def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
     called: list[dict[str, object]] = []
     pdf_path = tmp_path / "paper.pdf"
@@ -190,6 +152,40 @@ def test_main_routes_pdf_processing_run(monkeypatch, tmp_path: Path) -> None:
         "force_markdown": True,
         "max_batches": None,
         "llm_client": called[0]["llm_client"],
+        "prompt_registry": called[0]["prompt_registry"],
+        "prompt_label": cli.ctx.PROMPT_LABEL,
+    }]
+
+
+def test_main_routes_pdf_processing_run_markdown(monkeypatch, tmp_path: Path) -> None:
+    called: list[dict[str, object]] = []
+    markdown_path = tmp_path / "paper-1" / "paper.md"
+    markdown_path.parent.mkdir()
+    markdown_path.write_text("# Paper", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["cli.py", "pdf-processing", "run", "--markdown", str(markdown_path), "--max-batches", "1"],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_markdown_processing",
+        lambda markdown, **kwargs: called.append({"markdown": markdown, **kwargs}) or tmp_path / "paper.final.json",
+    )
+
+    cli.main()
+
+    assert called == [{
+        "markdown": markdown_path.resolve(),
+        "output_dir": None,
+        "prompt_first_batch": None,
+        "prompt_continuation_batch": None,
+        "force_markdown": False,
+        "max_batches": 1,
+        "llm_client": called[0]["llm_client"],
+        "prompt_registry": called[0]["prompt_registry"],
+        "prompt_label": cli.ctx.PROMPT_LABEL,
     }]
 
 
@@ -239,3 +235,225 @@ def test_main_routes_pdf_processing_markdown(monkeypatch, tmp_path: Path) -> Non
             "status_file": None,
         }
     ]
+
+
+def test_main_routes_pdf_processing_evidence(monkeypatch, tmp_path: Path) -> None:
+    called: list[dict[str, object]] = []
+    input_path = tmp_path / "paper.processed.json"
+    input_path.write_text("{}", encoding="utf-8")
+    output_dir = tmp_path / "evidence"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cli.py",
+            "pdf-processing",
+            "evidence",
+            "--input",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "test-model",
+            "--skip-existing",
+        ],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_pdf_evidence",
+        lambda input_path, **kwargs: called.append({"input_path": input_path, **kwargs})
+        or output_dir / "paper-1" / "canonical_evidence.json",
+    )
+
+    cli.main()
+
+    assert called == [
+        {
+            "input_path": input_path.resolve(),
+            "output_dir": output_dir.resolve(),
+            "model": "test-model",
+            "skip_existing": True,
+            "llm_client": called[0]["llm_client"],
+            "prompt_registry": called[0]["prompt_registry"],
+            "prompt_label": cli.ctx.PROMPT_LABEL,
+        }
+    ]
+
+
+def test_main_routes_pdf_processing_testing_pipeline(monkeypatch, tmp_path: Path) -> None:
+    called: list[tuple[str, dict[str, object]]] = []
+    pdf_dir = tmp_path / "active"
+    output_dir = tmp_path / "testing"
+    pdf_dir.mkdir()
+    pdf_path = pdf_dir / "paper-1.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cli.py",
+            "pdf-processing",
+            "testing",
+            "--pdf-dir",
+            str(pdf_dir),
+            "--output-dir",
+            str(output_dir),
+            "--paper-id",
+            "paper-1",
+            "--max-batches",
+            "1",
+            "--skip-existing-evidence",
+        ],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_pdf_processing",
+        lambda pdf, **kwargs: called.append(("processing", {"pdf": pdf, **kwargs}))
+        or output_dir
+        / "paper-1"
+        / "paper.final.json",
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_pdf_evidence",
+        lambda input_path, **kwargs: called.append(("evidence", {"input_path": input_path, **kwargs}))
+        or output_dir
+        / "paper-1"
+        / "canonical_evidence.json",
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_markdown_batch_debug_for_markdown",
+        lambda markdown_path, output_dir, **kwargs: called.append(
+            ("markdown_batches", {"markdown_path": markdown_path, "output_dir": output_dir, **kwargs})
+        )
+        or (output_dir / "batch_0001.md",),
+    )
+
+    cli.main()
+
+    assert (output_dir / "paper-1" / "source.pdf").read_bytes() == b"%PDF-1.4\n"
+    assert called == [
+        (
+            "processing",
+            {
+                "pdf": pdf_path.resolve(),
+                "output_dir": output_dir.resolve(),
+                "prompt_first_batch": None,
+                "prompt_continuation_batch": None,
+                "force_markdown": False,
+                "max_batches": 1,
+                "llm_client": called[0][1]["llm_client"],
+                "prompt_registry": called[0][1]["prompt_registry"],
+                "prompt_label": cli.ctx.PROMPT_LABEL,
+                "markdown_batches_dir": output_dir.resolve() / "paper-1" / "markdown_batches",
+            },
+        ),
+        (
+            "markdown_batches",
+            {
+                "markdown_path": output_dir.resolve() / "paper-1" / "paper.md",
+                "output_dir": output_dir.resolve() / "paper-1" / "markdown_batches",
+                "max_batches": 1,
+            },
+        ),
+        (
+            "evidence",
+            {
+                "input_path": output_dir.resolve() / "paper-1" / "paper.final.json",
+                "output_dir": output_dir.resolve(),
+                "model": None,
+                "skip_existing": True,
+                "llm_client": called[2][1]["llm_client"],
+                "prompt_registry": called[2][1]["prompt_registry"],
+                "prompt_label": cli.ctx.PROMPT_LABEL,
+            },
+        ),
+    ]
+
+
+def test_main_routes_pdf_processing_testing_reuse_markdown(monkeypatch, tmp_path: Path) -> None:
+    called: list[tuple[str, dict[str, object]]] = []
+    pdf_dir = tmp_path / "active"
+    markdown_dir = tmp_path / "processing"
+    output_dir = tmp_path / "testing"
+    pdf_dir.mkdir()
+    source_markdown_dir = markdown_dir / "paper-1"
+    source_markdown_dir.mkdir(parents=True)
+    pdf_path = pdf_dir / "paper-1.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    (source_markdown_dir / "paper.md").write_text("# Existing Markdown\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cli.py",
+            "pdf-processing",
+            "testing",
+            "--pdf-dir",
+            str(pdf_dir),
+            "--markdown-dir",
+            str(markdown_dir),
+            "--output-dir",
+            str(output_dir),
+            "--paper-id",
+            "paper-1",
+            "--reuse-markdown",
+            "--overwrite-markdown",
+        ],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_markdown_processing",
+        lambda markdown, **kwargs: called.append(("processing", {"markdown": markdown, **kwargs}))
+        or output_dir
+        / "paper-1"
+        / "paper.final.json",
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_pdf_evidence",
+        lambda input_path, **kwargs: called.append(("evidence", {"input_path": input_path, **kwargs}))
+        or output_dir
+        / "paper-1"
+        / "canonical_evidence.json",
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_markdown_batch_debug_for_markdown",
+        lambda markdown_path, output_dir, **kwargs: called.append(
+            ("markdown_batches", {"markdown_path": markdown_path, "output_dir": output_dir, **kwargs})
+        )
+        or (output_dir / "batch_0001.md",),
+    )
+
+    cli.main()
+
+    testing_markdown = output_dir / "paper-1" / "paper.md"
+    assert testing_markdown.read_text(encoding="utf-8") == "# Existing Markdown\n"
+    assert called[0] == (
+        "processing",
+        {
+            "markdown": testing_markdown.resolve(),
+            "output_dir": output_dir.resolve(),
+            "prompt_first_batch": None,
+            "prompt_continuation_batch": None,
+            "force_markdown": False,
+            "max_batches": None,
+            "llm_client": called[0][1]["llm_client"],
+            "prompt_registry": called[0][1]["prompt_registry"],
+            "prompt_label": cli.ctx.PROMPT_LABEL,
+        },
+    )
+    assert called[1] == (
+        "markdown_batches",
+        {
+            "markdown_path": testing_markdown.resolve(),
+            "output_dir": output_dir.resolve() / "paper-1" / "markdown_batches",
+            "max_batches": None,
+        },
+    )
+    assert called[2][0] == "evidence"

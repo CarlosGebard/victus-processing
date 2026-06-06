@@ -12,4 +12,10 @@ def run_pdf_processing(pdf_path: Path, **kwargs: Any) -> Path:
     return _run_pdf_processing(pdf_path, **kwargs)
 
 
-__all__ = ["run_pdf_processing"]
+def run_pdf_evidence(input_path: Path, **kwargs: Any) -> Path:
+    from src.application.pdf_processing.evidence import run_pdf_evidence as _run_pdf_evidence
+
+    return _run_pdf_evidence(input_path, **kwargs)
+
+
+__all__ = ["run_pdf_evidence", "run_pdf_processing"]

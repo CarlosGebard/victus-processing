@@ -5,11 +5,3 @@ docling_ingestion:
 heuristics:
   full_dir: "data/runtime/03-pdf_processing"
   final_dir: "data/runtime/03-pdf_processing"
-
-llm_to_claim:
-  input_dir: "data/runtime/03-pdf_processing"
-  output_dir: "data/runtime/04-claims_by_model"
-  model: "gpt-5-mini"
-  max_claims: 20
-  auto_approve_max_tokens: 7000
-  temperature: 0.0

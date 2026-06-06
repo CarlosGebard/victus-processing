@@ -20,6 +20,7 @@ from src.workspace.config import (
 )
 from src.workspace.artifacts import build_base_name, normalize_doi
 from src.application.ports.llm import LLMClient
+from src.application.ports.prompt_registry import PromptRegistry
 from src.application.metadata.paper_selector import PaperCandidate, classify_papers_with_llm
 
 
@@ -688,6 +689,8 @@ def _process_selection_batch(
     *,
     processed_papers: set[str],
     llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
     selection_mode: str = "broad-nutrition",
 ) -> tuple[int, int, int, int]:
     if not batch:
@@ -700,6 +703,8 @@ def _process_selection_batch(
         model=selection_model,
         selection_profile=normalized_mode,
         client=llm_client,
+        prompt_registry=prompt_registry,
+        prompt_label=prompt_label,
     )
     decisions_by_id = {item["id"]: item for item in decisions}
     processed_count = 0
@@ -764,6 +769,8 @@ def explore_with_llm_selection(
     selection_mode: str,
     summary_label: str,
     llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
 ) -> None:
     normalized_mode = normalize_selection_mode(selection_mode)
     if seed_dois is None:
@@ -831,6 +838,8 @@ def explore_with_llm_selection(
                 accepted,
                 processed_papers=processed_papers,
                 llm_client=llm_client,
+                prompt_registry=prompt_registry,
+                prompt_label=prompt_label,
                 selection_mode=normalized_mode,
             )
             reviewed += processed_count
@@ -843,6 +852,8 @@ def explore_with_llm_selection(
                 accepted,
                 processed_papers=processed_papers,
                 llm_client=llm_client,
+                prompt_registry=prompt_registry,
+                prompt_label=prompt_label,
                 selection_mode=normalized_mode,
             )
             reviewed += processed_count
@@ -857,6 +868,8 @@ def explore_with_llm_selection(
             accepted,
             processed_papers=processed_papers,
             llm_client=llm_client,
+            prompt_registry=prompt_registry,
+            prompt_label=prompt_label,
             selection_mode=normalized_mode,
         )
         reviewed += processed_count
@@ -879,33 +892,75 @@ def explore_with_llm_selection(
     print(f"- Source exhausted:       {'yes' if exhausted else 'no'}")
 
 
-def explore_with_nutrition_rag(seed_dois: list[str] | None = None, *, llm_client: LLMClient) -> None:
+def explore_with_nutrition_rag(
+    seed_dois: list[str] | None = None,
+    *,
+    llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
+) -> None:
     explore_with_llm_selection(
         seed_dois=seed_dois,
         selection_mode="broad-nutrition",
         summary_label="broad-nutrition",
         llm_client=llm_client,
+        prompt_registry=prompt_registry,
+        prompt_label=prompt_label,
     )
 
 
-def explore_with_dataset_gaps(seed_dois: list[str] | None = None, *, llm_client: LLMClient) -> None:
+def explore_with_dataset_gaps(
+    seed_dois: list[str] | None = None,
+    *,
+    llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
+) -> None:
     explore_with_llm_selection(
         seed_dois=seed_dois,
         selection_mode="dataset-gaps",
         summary_label="dataset-gaps",
         llm_client=llm_client,
+        prompt_registry=prompt_registry,
+        prompt_label=prompt_label,
     )
 
 
-def run_nutrition_rag_exploration(*, llm_client: LLMClient) -> None:
-    _run_llm_selection_exploration("broad-nutrition", llm_client=llm_client)
+def run_nutrition_rag_exploration(
+    *,
+    llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
+) -> None:
+    _run_llm_selection_exploration(
+        "broad-nutrition",
+        llm_client=llm_client,
+        prompt_registry=prompt_registry,
+        prompt_label=prompt_label,
+    )
 
 
-def run_dataset_gaps_exploration(*, llm_client: LLMClient) -> None:
-    _run_llm_selection_exploration("dataset-gaps", llm_client=llm_client)
+def run_dataset_gaps_exploration(
+    *,
+    llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
+) -> None:
+    _run_llm_selection_exploration(
+        "dataset-gaps",
+        llm_client=llm_client,
+        prompt_registry=prompt_registry,
+        prompt_label=prompt_label,
+    )
 
 
-def _run_llm_selection_exploration(selection_mode: str, *, llm_client: LLMClient) -> None:
+def _run_llm_selection_exploration(
+    selection_mode: str,
+    *,
+    llm_client: LLMClient,
+    prompt_registry: PromptRegistry | None = None,
+    prompt_label: str = "production",
+) -> None:
     normalized_mode = normalize_selection_mode(selection_mode)
     try:
         sync_seed_doi_queue()
@@ -937,10 +992,20 @@ def _run_llm_selection_exploration(selection_mode: str, *, llm_client: LLMClient
     print()
 
     if normalized_mode == "broad-nutrition":
-        explore_with_nutrition_rag(pending_seed_dois, llm_client=llm_client)
+        explore_with_nutrition_rag(
+            pending_seed_dois,
+            llm_client=llm_client,
+            prompt_registry=prompt_registry,
+            prompt_label=prompt_label,
+        )
         return
     if normalized_mode == "dataset-gaps":
-        explore_with_dataset_gaps(pending_seed_dois, llm_client=llm_client)
+        explore_with_dataset_gaps(
+            pending_seed_dois,
+            llm_client=llm_client,
+            prompt_registry=prompt_registry,
+            prompt_label=prompt_label,
+        )
         return
     raise ValueError(f"Selection mode no soportado: {selection_mode}")
 

@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-CONFIGURATION-AND-CLI-CONTRACT
 title: Victus Processing Configuration and CLI Contract
 status: source-of-truth
-updated_at: 2026-05-27
+updated_at: 2026-06-05
 owners:
   - architecture
 related_components:
@@ -58,6 +58,15 @@ Not covered:
 - LiteLLM and Langfuse settings are environment-driven infrastructure concerns.
 - Infisical may populate the process environment or `.env`; loaded values still
   follow the same precedence rules above.
+- Prompt registry runtime variables are `PROMPT_LABEL`, `PROMPTS_LOCAL_DIR`,
+  `DEFAULT_LLM_MODEL`, and `DEFAULT_LLM_MAX_TOKENS`.
+- `pdf_processing.max_tokens` controls the output token budget for local
+  `pdf-processing run` Markdown-to-JSON prompts. This stage-specific value may
+  be higher than `DEFAULT_LLM_MAX_TOKENS` because table-heavy paper batches can
+  emit large JSON objects. `null` means the request does not send an explicit
+  `max_tokens` value and relies on provider/model defaults.
+- Langfuse Prompt Management credentials are `LANGFUSE_PUBLIC_KEY`,
+  `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`.
 
 ## 4. Public CLI Surface
 
@@ -68,7 +77,6 @@ victus-processing metadata
 victus-processing bib
 victus-processing pdfs
 victus-processing pdf-processing
-victus-processing claims
 victus-processing bridge
 victus-processing data-layout
 victus-infisical-env
@@ -84,7 +92,8 @@ bib generate
 pdfs normalize
 pdf-processing run
 pdf-processing markdown
-claims extract
+pdf-processing testing
+pdf-processing evidence
 data-layout create
 victus-infisical-env export
 victus-infisical-env run
@@ -103,7 +112,12 @@ change.
 - `pdfs normalize` copies or skips PDFs based on DOI/PDF relation data.
 - `pdf-processing run` writes final structured paper artifacts.
 - `pdf-processing markdown` writes `paper.md` and markdown status only.
-- `claims extract` writes claims JSON from accepted structured JSON inputs.
+- `pdf-processing testing` runs the PDF-processing and evidence chain under
+  `data/testing/<paper_id>/`, including `source.pdf`, `paper.md`,
+  `markdown_batches/`, `paper.processed.json`, `paper.final.json`, and
+  evidence artifacts.
+- `pdf-processing evidence` writes `trimmed.json`, `experiment_map.json`, and
+  `canonical_evidence.json` from processed paper JSON inputs.
 - `data-layout create` ensures required runtime directories exist.
 - `victus-infisical-env export` writes Infisical secrets in dotenv-compatible
   formats.

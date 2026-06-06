@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-OPERATIONS
 title: Victus Processing Operations
 status: active
-updated_at: 2026-05-27
+updated_at: 2026-06-03
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -25,7 +25,7 @@ Primary operational responsibilities:
 
 - prepare local runtime directories;
 - configure API credentials for selected stages;
-- run metadata, PDF, PDF-processing, and claim stages;
+- run metadata, PDF, PDF-processing, and evidence stages;
 - inspect status artifacts and CLI output;
 - preserve local `data/` artifacts unless cleanup is intentional.
 
@@ -60,7 +60,7 @@ Run the main local flow:
 uv run victus-processing metadata explore --mode broad-nutrition
 uv run victus-processing pdfs normalize
 uv run victus-processing pdf-processing run
-uv run victus-processing claims extract --pattern "*/paper.final.json" --skip-existing
+uv run victus-processing pdf-processing evidence
 ```
 
 Run a single DOI metadata fetch:
@@ -84,14 +84,22 @@ PDF-processing detail: [PDF processing operations](operations/pdf-processing.md)
 Runtime defaults live in `config/*.yaml`. Relative paths resolve from the
 repository root. Optional root `config.yaml` can override domain config.
 
-Secrets are read from environment variables or `.env`.
+Secrets are read from environment variables. `.env` is only a local fallback;
+prefer Infisical injection for real runs.
 
 Common variables:
 
 - `SEMANTIC_SCHOLAR_API_KEY`
-- LiteLLM provider credentials and routing variables
+- `LITELLM_PROXY_API_BASE`
+- `LITELLM_PROXY_API_KEY` or legacy `LITELLM_KEY`
 - `LITELLM_METADATA_SELECTION_MODEL`
-- Langfuse variables when tracing is enabled
+- `LANGFUSE_PUBLIC_KEY`
+- `LANGFUSE_SECRET_KEY`
+- `LANGFUSE_HOST`
+- `PROMPT_LABEL`
+- `PROMPTS_LOCAL_DIR`
+- `DEFAULT_LLM_MODEL`
+- `DEFAULT_LLM_MAX_TOKENS`
 
 Infisical helper:
 
@@ -99,6 +107,13 @@ Infisical helper:
 uv run victus-infisical-env export --env dev --path / --output .env
 uv run victus-infisical-env run --env dev --path / -- victus-processing --help
 ```
+
+Prompt Management:
+
+- Langfuse Prompt Management is the primary prompt source when Langfuse
+  credentials are injected.
+- Local markdown prompts under `src/prompts/local/` are fallback prompts.
+- LiteLLM remains the execution adapter and does not fetch prompts.
 
 Configuration contracts and stable path expectations live in
 [Contracts](300-CONTRACTS.md).
@@ -114,14 +129,14 @@ Operational inspection sources:
 - `data/runtime/03-pdf_processing/{paper_id}/raw_batches/`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`.
-
-The claims CLI default pattern is `*/*.final.json`.
+- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`;
+- evidence artifacts under `data/runtime/04-evidence/`.
 
 ## 6. Failure and Recovery
 
 - Rerun interrupted stages; completed artifacts are skipped where supported.
-- Use `--skip-existing` for claim extraction when preserving previous outputs.
+- Preserve existing evidence outputs unless an explicit force or overwrite
+  behavior is implemented and requested.
 - Use force/overwrite flags only when intentionally regenerating artifacts.
 - Treat status JSONL files as operational state.
 - Do not remove `data/` artifacts during recovery unless cleanup is explicit.
@@ -131,7 +146,7 @@ The claims CLI default pattern is `*/*.final.json`.
 ## 7. Troubleshooting
 
 - Missing LiteLLM provider credentials: model-backed selection, PDF processing,
-  or claims commands fail.
+  or evidence commands fail.
 - Missing `SEMANTIC_SCHOLAR_API_KEY`: Semantic Scholar may run with stricter
   public rate limits.
 - LLM 429/5xx/network errors: LiteLLM owns retries, fallbacks, provider routing,

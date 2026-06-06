@@ -37,7 +37,7 @@ def test_litellm_client_uses_proxy_env(monkeypatch) -> None:
             "model": "gemini-flash-lite",
             "messages": [{"role": "user", "content": "ping"}],
             "metadata": {"operation": "test"},
-            "api_base": "http://litellm.victus.io/v1",
+            "api_base": "http://litellm.victus.io",
             "api_key": "test-key",
             "temperature": 0,
         }
