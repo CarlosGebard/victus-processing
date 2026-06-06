@@ -300,9 +300,6 @@ def build_experiment_packets(trimmed: dict[str, Any], experiment_map: dict[str, 
         packets.append(
             {
                 "scope_index": index,
-                "scope_label": scope.get("scope_label"),
-                "scope_kind": scope.get("scope_kind"),
-                "scope_basis": scope.get("scope_basis"),
                 "source_block_ids": source_block_ids,
                 "blocks": packet_blocks,
             }

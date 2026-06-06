@@ -259,8 +259,8 @@ Prompt output shape:
 ```
 
 `scope_label`, `scope_kind`, and `scope_basis` are compatibility fields when
-present in persisted maps or packets. Prompt producers must not be required to
-emit them.
+present in persisted maps. Prompt producers must not be required to emit them.
+Packet construction must not copy these fields into `experiment_packets.json`.
 
 ## 7. Experiment Packets Output
 
@@ -274,9 +274,6 @@ Persisted shape:
   "experiment_packets": [
     {
       "scope_index": integer,
-      "scope_label": string | null,
-      "scope_kind": string,
-      "scope_basis": string,
       "source_block_ids": list[string],
       "blocks": list[block]
     }

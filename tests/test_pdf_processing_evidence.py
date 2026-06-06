@@ -240,12 +240,10 @@ def test_build_experiment_packets_uses_scope_source_block_ids() -> None:
 
     packets = build_experiment_packets(trimmed, experiment_map)
 
+    assert set(packets[0]) == {"scope_index", "source_block_ids", "blocks"}
     assert packets == [
         {
             "scope_index": 0,
-            "scope_label": "Intervention results",
-            "scope_kind": "experimental",
-            "scope_basis": "method_result_link",
             "source_block_ids": ["paper-1:b1", "paper-1:b0"],
             "blocks": [trimmed["blocks"][1], trimmed["blocks"][0]],
         }
