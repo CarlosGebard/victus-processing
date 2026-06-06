@@ -250,7 +250,7 @@ def test_build_experiment_packets_uses_scope_source_block_ids() -> None:
     ]
 
 
-def test_validate_experiment_map_normalizes_missing_scope_kind_and_basis_to_unclear() -> None:
+def test_validate_experiment_map_drops_legacy_scope_metadata() -> None:
     experiment_map = {
         "experiment_scopes": [
             {
@@ -265,8 +265,7 @@ def test_validate_experiment_map_normalizes_missing_scope_kind_and_basis_to_uncl
 
     normalized = validate_experiment_map(experiment_map, block_ids={"paper-1:b0"})
 
-    assert normalized["experiment_scopes"][0]["scope_kind"] == "unclear"
-    assert normalized["experiment_scopes"][0]["scope_basis"] == "unclear"
+    assert normalized["experiment_scopes"] == [{"source_block_ids": ["paper-1:b0"]}]
 
 
 def test_validate_canonical_evidence_rejects_source_ids_outside_packet() -> None:
@@ -359,6 +358,7 @@ def test_run_pdf_evidence_writes_prompt_contract_outputs(tmp_path: Path) -> None
     experiment_packets = json.loads((paper_dir / "experiment_packets.json").read_text(encoding="utf-8"))
     canonical = json.loads(output_path.read_text(encoding="utf-8"))
     assert set(experiment_map) == {"experiment_scopes", "unmapped_block_ids"}
+    assert set(experiment_map["experiment_scopes"][0]) == {"source_block_ids"}
     assert [packet["source_block_ids"] for packet in experiment_packets["experiment_packets"]] == [
         ["paper-1:b0", "paper-1:b1"],
         ["paper-1:b3"],

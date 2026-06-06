@@ -258,9 +258,9 @@ Prompt output shape:
 }
 ```
 
-`scope_label`, `scope_kind`, and `scope_basis` are compatibility fields when
-present in persisted maps. Prompt producers must not be required to emit them.
-Packet construction must not copy these fields into `experiment_packets.json`.
+Legacy `scope_label`, `scope_kind`, and `scope_basis` fields must be ignored
+when present in mapper output. They must not be persisted in
+`experiment_map.json` or copied into `experiment_packets.json`.
 
 ## 7. Experiment Packets Output
 

@@ -73,9 +73,9 @@ Prompt output:
 }
 ```
 
-The prompt output only requires `source_block_ids` per scope. Runtime validation
-may preserve optional mapper fields such as `scope_label`, `scope_kind`, and
-`scope_basis` when present, but downstream consumers must not require them.
+The prompt output only permits `source_block_ids` per scope. Runtime validation
+must drop legacy mapper fields such as `scope_label`, `scope_kind`, and
+`scope_basis` before persisting `experiment_map.json`.
 
 The persisted output preserves the prompt output envelope after validation. It
 does not add `paper_id` or `experiment_id`; the map organizes block ids only.
@@ -92,11 +92,8 @@ trimmed blocks. It is not a separate LLM output.
 - Different outcomes, measurements, tables, figures, subgroups, timepoints,
   doses, statistical tests, quantitative values, or result directions are soft
   boundaries and must not cause packet splitting by themselves.
-- Optional `scope_label` must be structural and must not contain result
-  direction or a conclusion-like statement.
-- Optional `scope_kind` and `scope_basis` should use only documented enum values
-  when present. Missing, `null`, or empty values are normalized to `unclear` by
-  compatibility validation.
+- Legacy `scope_label`, `scope_kind`, and `scope_basis` values must not be
+  retained in persisted experiment maps or downstream packets.
 - Missing or uncertain scientific meaning must remain unmapped or `unclear`;
   it must not be inferred.
 

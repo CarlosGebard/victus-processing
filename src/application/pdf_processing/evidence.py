@@ -40,19 +40,6 @@ EVIDENCE_GENERATION_MODES = {
     "argues_or_interprets",
     "unclear",
 }
-SCOPE_KINDS = {"experimental", "observational", "analytical", "descriptive", "mixed", "unclear"}
-SCOPE_BASES = {
-    "same_heading",
-    "shared_experiment_label",
-    "shared_arm_or_group_label",
-    "shared_analysis_context",
-    "shared_measurement_context",
-    "method_result_link",
-    "table_or_figure_context",
-    "section_proximity",
-    "single_block_scope",
-    "unclear",
-}
 EVIDENCE_TYPES = {
     "between_group_result",
     "within_group_change",
@@ -257,22 +244,9 @@ def validate_experiment_map(payload: dict[str, Any], *, block_ids: set[str]) -> 
     for index, scope in enumerate(scopes):
         if not isinstance(scope, dict):
             raise ValueError(f"Experiment scope {index} must be an object")
-        scope_kind = _enum_or_unclear(scope.get("scope_kind"))
-        scope_basis = _enum_or_unclear(scope.get("scope_basis"))
-        if scope_kind not in SCOPE_KINDS:
-            raise ValueError(f"Experiment scope {index} invalid scope_kind: {scope_kind}")
-        if scope_basis not in SCOPE_BASES:
-            raise ValueError(f"Experiment scope {index} invalid scope_basis: {scope_basis}")
         source_block_ids = _normalize_block_id_list(scope.get("source_block_ids"), block_ids, f"Experiment scope {index}")
         referenced.update(source_block_ids)
-        normalized_scopes.append(
-            {
-                "scope_label": scope.get("scope_label"),
-                "scope_kind": scope_kind,
-                "scope_basis": scope_basis,
-                "source_block_ids": source_block_ids,
-            }
-        )
+        normalized_scopes.append({"source_block_ids": source_block_ids})
     normalized_unmapped = _normalize_block_id_list(unmapped, block_ids, "Experiment map unmapped_block_ids")
     referenced.update(normalized_unmapped)
     unknown = referenced.difference(block_ids)
@@ -559,14 +533,6 @@ def _normalize_block_id_list(value: Any, known_block_ids: set[str], label: str) 
 def _validate_enum(value: Any, allowed: set[Any], label: str) -> None:
     if value not in allowed:
         raise ValueError(f"{label} invalid value: {value}")
-
-
-def _enum_or_unclear(value: Any) -> Any:
-    if value is None:
-        return "unclear"
-    if isinstance(value, str) and not value.strip():
-        return "unclear"
-    return value
 
 
 def _read_json(path: Path) -> dict[str, Any]:
