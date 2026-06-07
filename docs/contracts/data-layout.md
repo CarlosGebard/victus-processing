@@ -3,15 +3,13 @@ id: VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
 title: Victus Processing Data Layout Contract
 status: source-of-truth
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_components:
   - src.workspace.config
   - src.workspace.data_layout
-  - src.application.metadata
-  - src.application.pdf_extraction
+  - src.application.metadata_extraction
+  - src.application.metadata_to_pdf
   - src.application.pdf_processing
-  - src.application.evidence
+  - src.application.evidence_extraction
   - src.application.ports.llm
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
@@ -203,7 +201,7 @@ layout above unless an explicit compatibility task requires the legacy path.
 - Validation failures should prevent invalid outputs from being treated as
   successful stage results.
 - Partial failures should be visible through status artifacts or CLI output.
-- Provider quota, retry, and fallback behavior is owned by LiteLLM.
+- Provider quota, retry, and fallback behavior is handled by LiteLLM.
 - `processing_status.jsonl` rows with `status: failed` must include an error
   code when the pipeline can classify the failure.
 - Invalid or missing model output JSON must fail the stage rather than producing

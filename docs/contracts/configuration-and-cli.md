@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-CONFIGURATION-AND-CLI-CONTRACT
 title: Victus Processing Configuration and CLI Contract
 status: source-of-truth
 updated_at: 2026-06-05
-owners:
-  - architecture
 related_components:
   - src.cli
   - src.workspace.config
@@ -59,12 +57,10 @@ Not covered:
 - Infisical may populate the process environment or `.env`; loaded values still
   follow the same precedence rules above.
 - Prompt registry runtime variables are `PROMPT_LABEL`, `PROMPTS_LOCAL_DIR`,
-  `DEFAULT_LLM_MODEL`, and `DEFAULT_LLM_MAX_TOKENS`.
+  and `DEFAULT_LLM_MODEL`.
 - `pdf_processing.max_tokens` controls the output token budget for local
-  `pdf-processing run` Markdown-to-JSON prompts. This stage-specific value may
-  be higher than `DEFAULT_LLM_MAX_TOKENS` because table-heavy paper batches can
-  emit large JSON objects. `null` means the request does not send an explicit
-  `max_tokens` value and relies on provider/model defaults.
+  `pdf-processing run` Markdown-to-JSON prompts. `null` means the request does
+  not send an explicit `max_tokens` value and relies on provider/model defaults.
 - Langfuse Prompt Management credentials are `LANGFUSE_PUBLIC_KEY`,
   `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST`.
 
@@ -73,10 +69,11 @@ Not covered:
 The stable command groups are:
 
 ```text
-victus-processing metadata
-victus-processing bib
-victus-processing pdfs
+victus-processing metadata-extraction
+victus-processing metadata-to-pdf
 victus-processing pdf-processing
+victus-processing evidence-extraction
+victus-processing testing-pipeline
 victus-processing bridge
 victus-processing data-layout
 victus-infisical-env
@@ -85,15 +82,15 @@ victus-infisical-env
 Stable subcommands currently used by operators and agents:
 
 ```text
-metadata explore
-metadata from-doi
-metadata seed-dois
-bib generate
-pdfs normalize
+metadata-extraction explore
+metadata-extraction from-doi
+metadata-extraction seed-dois
+metadata-to-pdf generate-bib
+metadata-to-pdf normalize-pdfs
 pdf-processing run
 pdf-processing markdown
-pdf-processing testing
-pdf-processing evidence
+evidence-extraction run
+testing-pipeline run
 data-layout create
 victus-infisical-env export
 victus-infisical-env run
@@ -105,18 +102,19 @@ change.
 
 ## 5. Inputs and Outputs
 
-- `metadata explore` reads exploration config and DOI seed queues.
-- `metadata from-doi` requires `--doi` and writes one metadata JSON.
-- `metadata seed-dois` writes seed DOI queues for configured profiles.
-- `bib generate` writes BibTeX from metadata or an explicit CSV.
-- `pdfs normalize` copies or skips PDFs based on DOI/PDF relation data.
+- `metadata-extraction explore` reads exploration config and DOI seed queues.
+- `metadata-extraction from-doi` requires `--doi` and writes one metadata JSON.
+- `metadata-extraction seed-dois` writes seed DOI queues for configured profiles.
+- `metadata-to-pdf generate-bib` writes BibTeX from metadata or an explicit CSV.
+- `metadata-to-pdf normalize-pdfs` copies or skips PDFs based on DOI/PDF
+  relation data.
 - `pdf-processing run` writes final structured paper artifacts.
 - `pdf-processing markdown` writes `paper.md` and markdown status only.
-- `pdf-processing testing` runs the PDF-processing and evidence chain under
+- `testing-pipeline run` runs the PDF-processing and evidence chain under
   `data/testing/<paper_id>/`, including `source.pdf`, `paper.md`,
   `markdown_batches/`, `paper.processed.json`, `paper.final.json`, and
   evidence artifacts.
-- `pdf-processing evidence` writes `trimmed.json`, `experiment_map.json`, and
+- `evidence-extraction run` writes `trimmed.json`, `experiment_map.json`, and
   `canonical_evidence.json` from processed paper JSON inputs.
 - `data-layout create` ensures required runtime directories exist.
 - `victus-infisical-env export` writes Infisical secrets in dotenv-compatible

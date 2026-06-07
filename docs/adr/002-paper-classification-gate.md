@@ -3,8 +3,6 @@ id: ADR-002-PAPER-CLASSIFICATION-GATE
 title: Paper Classification Gate Before Evidence Extraction
 status: accepted
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_docs:
   - VICTUS-PROCESSING-PAPER-CLASSIFICATION-CONTRACT
   - VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT

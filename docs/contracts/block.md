@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-BLOCK-CONTRACT
 title: Victus Processing Block Contract
 status: source-of-truth
 updated_at: 2026-06-03
-owners:
-  - architecture
 related_components:
   - src.application.pdf_processing.processed_paper_contract
 related_docs:
@@ -61,7 +59,7 @@ text: string
 
 - `block_id` identifies the textual origin inside the paper. It is the
   documentary address of the block.
-- `paper_id` identifies the post-PDF paper that owns the block.
+- `paper_id` identifies the post-PDF paper associated with the block.
 - `content_hash` identifies the normalized text content. It enables change,
   duplicate, and re-processing detection.
 - `order` preserves the documentary sequence of the paper.

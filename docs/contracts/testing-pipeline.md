@@ -3,13 +3,11 @@ id: VICTUS-PROCESSING-TESTING-PIPELINE-CONTRACT
 title: Victus Processing Testing Pipeline Contract
 status: source-of-truth
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_components:
   - src.cli
-  - src.application.pdf_processing.testing_artifacts
+  - src.application.testing_pipeline.artifacts
   - src.application.pdf_processing.pipeline
-  - src.application.pdf_processing.evidence
+  - src.application.evidence_extraction.evidence
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
   - VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
@@ -24,7 +22,7 @@ tags:
 
 ## 1. Purpose
 
-This contract defines the `pdf-processing testing` review workspace and the
+This contract defines the `testing-pipeline run` review workspace and the
 artifact guarantees under `data/testing/{paper_id}/`.
 
 ## 2. Scope
@@ -45,7 +43,7 @@ Not covered:
 
 ## 3. Guarantees
 
-- `pdf-processing testing` writes artifacts under `data/testing/{paper_id}/`.
+- `testing-pipeline run` writes artifacts under `data/testing/{paper_id}/`.
 - `source.pdf` is copied from the active PDF selected by `paper_id`.
 - Without `--reuse-markdown`, testing may generate `paper.md` through Docling.
 - With `--reuse-markdown`, testing copies an existing

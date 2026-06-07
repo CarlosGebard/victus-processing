@@ -67,7 +67,7 @@ async def map_experiment_scopes(
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
-            operation="pdf_processing.experiment_scope_mapper",
+            operation="evidence_extraction.results_scope_mapper",
             model=model,
             messages=build_experiment_scope_messages(prompt, blocks),
             temperature=temperature,
@@ -75,10 +75,10 @@ async def map_experiment_scopes(
             response_format={"type": "json_object"},
             metadata={
                 "paper_id": paper_id,
-                "prompt_name": prompt_spec.name if prompt_spec else "legacy.experiment_scope_mapper",
+                "prompt_name": prompt_spec.name if prompt_spec else "evidence_extraction/results_scope_mapper",
                 "prompt_version": prompt_spec.version if prompt_spec else None,
                 "prompt_label": prompt_label,
-                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+                "prompt_source": prompt_spec.source if prompt_spec else "local_path",
             },
         )
     )
@@ -100,7 +100,7 @@ async def classify_paper(
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
-            operation="pdf_processing.paper_classifier",
+            operation="evidence_extraction.paper_classifier",
             model=model,
             messages=build_paper_classifier_messages(prompt, metadata=metadata, blocks=blocks),
             temperature=temperature,
@@ -108,10 +108,10 @@ async def classify_paper(
             response_format={"type": "json_object"},
             metadata={
                 "paper_id": paper_id,
-                "prompt_name": prompt_spec.name if prompt_spec else "legacy.paper_classifier",
+                "prompt_name": prompt_spec.name if prompt_spec else "evidence_extraction/paper_classifier",
                 "prompt_version": prompt_spec.version if prompt_spec else None,
                 "prompt_label": prompt_label,
-                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+                "prompt_source": prompt_spec.source if prompt_spec else "local_path",
             },
         )
     )
@@ -132,7 +132,7 @@ async def extract_canonical_evidence(
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
-            operation="pdf_processing.canonical_evidence_extractor",
+            operation="evidence_extraction.canonical_evidence_extractor",
             model=model,
             messages=build_canonical_evidence_messages(
                 prompt,
@@ -144,10 +144,10 @@ async def extract_canonical_evidence(
             metadata={
                 "paper_id": paper_id,
                 "scope_index": experiment_packet.get("scope_index"),
-                "prompt_name": prompt_spec.name if prompt_spec else "legacy.canonical_evidence",
+                "prompt_name": prompt_spec.name if prompt_spec else "evidence_extraction/canonical_evidence_extractor",
                 "prompt_version": prompt_spec.version if prompt_spec else None,
                 "prompt_label": prompt_label,
-                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+                "prompt_source": prompt_spec.source if prompt_spec else "local_path",
             },
         )
     )

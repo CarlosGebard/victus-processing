@@ -11,7 +11,7 @@ from src.application.ports.prompt_registry import PromptRegistry, PromptSpec
 from src.infrastructure.prompts.compile import compile_template
 from src.prompts import (
     build_paper_selector_user_prompt,
-    get_paper_selector_system_prompt,
+    get_paper_selector_prompt,
 )
 
 DEFAULT_DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
@@ -100,7 +100,7 @@ def build_responses_payload(
         "input": [
             {
                 "role": "system",
-                "content": get_paper_selector_system_prompt(selection_profile),
+                "content": get_paper_selector_prompt(selection_profile),
             },
             {"role": "user", "content": build_user_prompt(candidates)},
         ],
@@ -207,9 +207,13 @@ def classify_papers_with_llm(
     prompt_label: str = "production",
     dotenv_path: str | Path = DEFAULT_DOTENV_PATH,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
-    prompt_name = "paper-selector-dataset-gaps" if selection_profile == "dataset-gaps" else "paper-selector"
+    prompt_name = (
+        "metadata_extraction/paper_selector_dataset_gaps"
+        if selection_profile == "dataset-gaps"
+        else "metadata_extraction/paper_selector"
+    )
     prompt_spec: PromptSpec | None = None
-    system_prompt = get_paper_selector_system_prompt(selection_profile)
+    system_prompt = get_paper_selector_prompt(selection_profile)
     if prompt_registry is not None:
         prompt_spec = prompt_registry.get(prompt_name, label=prompt_label)
         system_prompt = compile_template(prompt_spec.template, {})
@@ -218,7 +222,7 @@ def classify_papers_with_llm(
     effective_temperature = prompt_config.get("temperature")
     response = client.complete(
         LLMRequest(
-            operation="metadata.paper_selection",
+            operation="metadata_extraction.paper_selector",
             model=effective_model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -237,10 +241,10 @@ def classify_papers_with_llm(
             metadata={
                 "selection_profile": selection_profile,
                 "candidate_count": len(candidates),
-                "prompt_name": prompt_spec.name if prompt_spec else f"legacy.{prompt_name}",
+                "prompt_name": prompt_spec.name if prompt_spec else prompt_name,
                 "prompt_version": prompt_spec.version if prompt_spec else None,
                 "prompt_label": prompt_label,
-                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+                "prompt_source": prompt_spec.source if prompt_spec else "local_path",
             },
         )
     )

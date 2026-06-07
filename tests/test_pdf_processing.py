@@ -14,7 +14,7 @@ from src.application.pdf_processing.merge import merge_batch_outputs
 from src.application.pdf_processing.models import MarkdownBatchOutput
 from src.application.pdf_processing.models import PdfProcessingConfig
 from src.application.pdf_processing.pipeline import _load_or_create_markdown, _write_llm_failure, run_markdown_processing, run_pdf_processing
-from src.application.pdf_processing.testing_artifacts import collect_testing_artifacts, copy_testing_markdown
+from src.application.testing_pipeline.artifacts import collect_testing_artifacts, copy_testing_markdown
 
 
 class FakeMarkdownLLM:
@@ -272,11 +272,16 @@ def test_run_pdf_processing_writes_markdown_batch_debug_when_requested(monkeypat
     )
     config.prompt_first_batch.write_text("Return JSON.", encoding="utf-8")
     config.prompt_continuation_batch.write_text("Return JSON.", encoding="utf-8")
+
+    def fake_pdf_to_markdown(pdf_path: Path, output_path: Path) -> str:
+        markdown = "# Paper\n\n## Methods\n\nMethods text."
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(markdown, encoding="utf-8")
+        return markdown
+
     monkeypatch.setattr(
         "src.application.pdf_processing.pipeline.pdf_to_markdown",
-        lambda pdf_path, output_path: output_path.parent.mkdir(parents=True, exist_ok=True)
-        or output_path.write_text("# Paper\n\n## Methods\n\nMethods text.", encoding="utf-8")
-        or "# Paper\n\n## Methods\n\nMethods text.",
+        fake_pdf_to_markdown,
     )
 
     output = run_pdf_processing(

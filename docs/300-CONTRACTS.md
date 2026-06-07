@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-CONTRACTS
 title: Victus Processing Contracts
 status: source-of-truth
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -49,7 +47,7 @@ or stage handoffs.
 
 Contracts cover:
 
-- local runtime artifact ownership;
+- local runtime artifact boundaries;
 - stage handoff locations;
 - stable identity terms;
 - block identity and field-level semantics;

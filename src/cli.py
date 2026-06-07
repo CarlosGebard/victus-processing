@@ -5,9 +5,9 @@ from pathlib import Path
 
 from src.workspace import config as ctx
 from src.workspace.data_layout import create_data_layout
-from src.application.pdf_extraction.json_to_bib import generate_bib_flow
-from src.application.metadata import gap_seed_dois, seed_dois
-from src.application.pdf_extraction import normalize_from_relations
+from src.application.metadata_to_pdf.json_to_bib import generate_bib_flow
+from src.application.metadata_extraction import gap_seed_dois, seed_dois
+from src.application.metadata_to_pdf import normalize_from_relations
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
 from src.application.pdf_processing.pipeline import (
     load_pdf_processing_config,
@@ -16,8 +16,8 @@ from src.application.pdf_processing.pipeline import (
     run_pdf_processing_dir,
     write_markdown_batch_debug_for_markdown,
 )
-from src.application.pdf_processing.evidence import run_pdf_evidence, run_pdf_evidence_dir
-from src.application.pdf_processing.testing_artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
+from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_dir
+from src.application.testing_pipeline.artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
 from src.infrastructure.llm.factory import build_llm_client
 from src.infrastructure.prompts.factory import build_prompt_registry
 
@@ -26,7 +26,8 @@ run_metadata_exploration_flow = None
 
 CLI_DESCRIPTION = (
     "CLI profesional para el pipeline de papers. "
-    "Organizada por dominios: metadata, bib, pdfs, pdf-processing, bridge y data-layout."
+    "Organizada por pipelines: metadata-extraction, metadata-to-pdf, "
+    "pdf-processing, evidence-extraction y testing-pipeline."
 )
 
 
@@ -41,7 +42,7 @@ def _optional_resolved(path: Path | None) -> Path | None:
 def cmd_metadata_explore(args: argparse.Namespace) -> None:
     global run_metadata_exploration_flow
     if run_metadata_exploration_flow is None:
-        from src.application.metadata.stage import run_metadata_exploration_flow as loaded_run_metadata_exploration_flow
+        from src.application.metadata_extraction.stage import run_metadata_exploration_flow as loaded_run_metadata_exploration_flow
 
         run_metadata_exploration_flow = loaded_run_metadata_exploration_flow
 
@@ -54,7 +55,7 @@ def cmd_metadata_explore(args: argparse.Namespace) -> None:
 
 
 def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
-    from src.application.metadata import citation_exploration
+    from src.application.metadata_extraction import citation_exploration
 
     try:
         output_path, status = citation_exploration.write_metadata_for_doi(
@@ -321,11 +322,11 @@ def cmd_data_layout_create(args: argparse.Namespace) -> None:
         print(f"- {ctx.display_path(directory)}")
 
 
-def _add_metadata_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     default_exploration_mode = str((ctx.CONFIG.get("exploration") or {}).get("mode", "broad-nutrition"))
     metadata_parser = subparsers.add_parser(
-        "metadata",
-        help="Operaciones de metadata, exploracion y seeds",
+        "metadata-extraction",
+        help="Extrae metadata, explora candidatos y genera seeds",
         description=(
             "Grupo de metadata. Incluye exploracion de papers, alta puntual desde DOI "
             "y generacion de seed DOIs."
@@ -403,16 +404,16 @@ def _add_metadata_group(subparsers: argparse._SubParsersAction[argparse.Argument
     metadata_seed_dois_parser.set_defaults(handler=cmd_metadata_seed_dois)
 
 
-def _add_bib_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    bib_parser = subparsers.add_parser(
-        "bib",
-        help="Operaciones de bibliografia",
-        description="Genera bibliografia BibTeX desde metadata canonica o desde CSV auxiliar.",
+def _add_metadata_to_pdf_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    metadata_to_pdf_parser = subparsers.add_parser(
+        "metadata-to-pdf",
+        help="Genera bibliografia y normaliza PDFs hacia entradas activas",
+        description="Convierte metadata y PDFs crudos en PDFs activos normalizados para procesamiento.",
     )
-    bib_subparsers = bib_parser.add_subparsers(dest="bib_command")
+    metadata_to_pdf_subparsers = metadata_to_pdf_parser.add_subparsers(dest="metadata_to_pdf_command")
 
-    bib_generate_parser = bib_subparsers.add_parser(
-        "generate",
+    bib_generate_parser = metadata_to_pdf_subparsers.add_parser(
+        "generate-bib",
         help="Genera un archivo .bib",
     )
     bib_generate_parser.add_argument("--output", type=Path, default=None, help="Ruta opcional del archivo .bib")
@@ -424,16 +425,8 @@ def _add_bib_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParse
     )
     bib_generate_parser.set_defaults(handler=cmd_bib_generate)
 
-
-def _add_pdfs_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    pdfs_parser = subparsers.add_parser(
-        "pdfs",
-        help="Operaciones sobre PDFs crudos y normalizados",
-    )
-    pdfs_subparsers = pdfs_parser.add_subparsers(dest="pdfs_command")
-
-    pdfs_normalize_parser = pdfs_subparsers.add_parser(
-        "normalize",
+    pdfs_normalize_parser = metadata_to_pdf_subparsers.add_parser(
+        "normalize-pdfs",
         help=(
             "Normaliza raw PDFs hacia nombres DOI-first usando doi_pdf_relations*.csv "
             f"({ctx.display_path(ctx.RAW_PDF_DIR)} -> {ctx.display_path(ctx.DOCLING_INPUT_DIR)})"
@@ -578,11 +571,18 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     )
     markdown_parser.set_defaults(handler=cmd_pdf_processing_markdown)
 
-    evidence_parser = pdf_processing_subparsers.add_parser(
-        "evidence",
+def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    defaults = load_pdf_processing_config()
+    evidence_parser = subparsers.add_parser(
+        "evidence-extraction",
         help="Genera trimmed.json, experiment_map.json y canonical_evidence.json desde paper.processed.json",
     )
-    evidence_parser.add_argument(
+    evidence_subparsers = evidence_parser.add_subparsers(dest="evidence_extraction_command")
+    run_parser = evidence_subparsers.add_parser(
+        "run",
+        help="Genera artifacts de evidencia desde paper.processed.json",
+    )
+    run_parser.add_argument(
         "--input",
         type=Path,
         default=defaults.output_dir,
@@ -591,105 +591,112 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
             f"(default: {ctx.display_path(defaults.output_dir)})"
         ),
     )
-    evidence_parser.add_argument(
+    run_parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
         help=f"Directorio de evidencia (default: {ctx.display_path(ctx.EVIDENCE_OUTPUT_DIR)})",
     )
-    evidence_parser.add_argument(
+    run_parser.add_argument(
         "--pattern",
         default="*/paper.processed.json",
         help='Patron glob cuando --input es directorio (default: "*/paper.processed.json")',
     )
-    evidence_parser.add_argument(
+    run_parser.add_argument(
         "--limit",
         type=int,
         default=None,
         help="Cantidad maxima de papers a procesar cuando --input es directorio",
     )
-    evidence_parser.add_argument("--model", default=None, help="Modelo LLM alternativo para evidence")
-    evidence_parser.add_argument(
+    run_parser.add_argument("--model", default=None, help="Modelo LLM alternativo para evidence")
+    run_parser.add_argument(
         "--skip-existing",
         action="store_true",
         help="Salta papers con canonical_evidence.json existente",
     )
-    evidence_parser.set_defaults(handler=cmd_pdf_processing_evidence)
+    run_parser.set_defaults(handler=cmd_pdf_processing_evidence)
 
-    testing_parser = pdf_processing_subparsers.add_parser(
-        "testing",
+def _add_testing_pipeline_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    defaults = load_pdf_processing_config()
+    testing_parser = subparsers.add_parser(
+        "testing-pipeline",
         help="Ejecuta PDF-processing completo en data/testing/<paper_id>",
         description=(
             "Ejecuta el flujo completo de testing por paper: copia source.pdf, "
             "crea paper.md con Docling, estructura con LLM y genera evidence."
         ),
     )
-    testing_parser.add_argument(
+    testing_subparsers = testing_parser.add_subparsers(dest="testing_pipeline_command")
+    run_parser = testing_subparsers.add_parser(
+        "run",
+        help="Ejecuta el pipeline completo en data/testing/<paper_id>",
+    )
+    run_parser.add_argument(
         "--pdf-dir",
         type=Path,
         default=defaults.input_dir,
         help=f"Directorio de PDFs fuente (default: {ctx.display_path(defaults.input_dir)})",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--output-dir",
         type=Path,
         default=ctx.TESTING_ROOT_DIR,
         help=f"Directorio testing destino (default: {ctx.display_path(ctx.TESTING_ROOT_DIR)})",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--markdown-dir",
         type=Path,
         default=defaults.output_dir,
         help=f"Directorio con <paper_id>/paper.md para --reuse-markdown (default: {ctx.display_path(defaults.output_dir)})",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--paper-id",
         action="append",
         default=None,
         help="Paper puntual a procesar. Puede repetirse. Si se omite, usa todos los PDFs de --pdf-dir.",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--limit",
         type=int,
         default=None,
         help="Cantidad maxima de papers a procesar cuando no se especifica --paper-id.",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--overwrite-source",
         action="store_true",
         help="Sobrescribe source.pdf existente en testing.",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--reuse-markdown",
         action="store_true",
         help="Copia paper.md existente desde --markdown-dir y evita ejecutar Docling.",
     )
-    testing_parser.add_argument(
+    run_parser.add_argument(
         "--overwrite-markdown",
         action="store_true",
         help="Sobrescribe paper.md existente en testing cuando se usa --reuse-markdown.",
     )
-    testing_parser.add_argument("--prompt-first-batch", type=Path, default=None, help="Prompt alternativo para primer batch")
-    testing_parser.add_argument(
+    run_parser.add_argument("--prompt-first-batch", type=Path, default=None, help="Prompt alternativo para primer batch")
+    run_parser.add_argument(
         "--prompt-continuation-batch",
         type=Path,
         default=None,
         help="Prompt alternativo para batches de continuacion",
     )
-    testing_parser.add_argument("--force-markdown", action="store_true", help="Regenera Markdown Docling existente")
-    testing_parser.add_argument(
+    run_parser.add_argument("--force-markdown", action="store_true", help="Regenera Markdown Docling existente")
+    run_parser.add_argument(
         "--max-batches",
         type=int,
         default=None,
         help="Cantidad maxima de batches Markdown a procesar para este PDF",
     )
-    testing_parser.add_argument("--evidence-model", default=None, help="Modelo LLM alternativo para evidence")
-    testing_parser.add_argument(
+    run_parser.add_argument("--evidence-model", default=None, help="Modelo LLM alternativo para evidence")
+    run_parser.add_argument(
         "--skip-existing-evidence",
         action="store_true",
         help="Salta papers con canonical_evidence.json existente",
     )
-    testing_parser.set_defaults(handler=cmd_pdf_processing_testing)
+    run_parser.set_defaults(handler=cmd_pdf_processing_testing)
 
 
 def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -737,10 +744,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=CLI_DESCRIPTION)
     subparsers = parser.add_subparsers(dest="command")
 
-    _add_metadata_group(subparsers)
-    _add_bib_group(subparsers)
-    _add_pdfs_group(subparsers)
+    _add_metadata_extraction_group(subparsers)
+    _add_metadata_to_pdf_group(subparsers)
     _add_pdf_processing_group(subparsers)
+    _add_evidence_extraction_group(subparsers)
+    _add_testing_pipeline_group(subparsers)
     _add_bridge_group(subparsers)
     _add_data_layout_group(subparsers)
 

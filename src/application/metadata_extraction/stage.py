@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.application.metadata.citation_exploration import (
+from src.application.metadata_extraction.citation_exploration import (
     normalize_selection_mode,
     run_dataset_gaps_exploration,
     run_nutrition_rag_exploration,

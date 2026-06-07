@@ -12,10 +12,10 @@ updated_at: 2026-06-03
 `victus-processing` exists to turn scientific-paper inputs into local,
 inspectable evidence-processing artifacts for the Victus ecosystem.
 
-It owns the local workflow from paper metadata and PDFs to structured blocks,
+It covers the local workflow from paper metadata and PDFs to structured blocks,
 trimmed evidence inputs, experiment maps, and canonical evidence. The
 repository is optimized for reproducible batch processing, explicit artifact
-ownership, and agent-readable documentation.
+boundaries, and agent-readable documentation.
 
 ## 2. System Goals
 
@@ -36,7 +36,7 @@ Non-goals:
 
 ## 3. Repository Scope
 
-This repository owns:
+This repository covers:
 
 - `victus-processing` CLI commands;
 - local `data/` runtime layout;
@@ -46,7 +46,7 @@ This repository owns:
 - LLM evidence extraction outputs;
 - local contracts for artifacts, paths, and stage handoffs.
 
-This repository does not own:
+This repository does not cover:
 
 - analytics dashboards or downstream products;
 - production infrastructure;
@@ -93,7 +93,7 @@ Planned documentation structure:
   document location, order, context, and content kind.
 - **Trimmed paper JSON:** evidence-stage handoff containing only metadata and
   blocks from evidence-relevant scientific sections.
-- **Experiment Map:** block-id grouping produced by `experiment_scope_mapper`.
+- **Experiment Map:** block-id grouping produced by `results_scope_mapper`.
 - **Canonical Evidence:** normalized, traceable evidence record extracted from
   metadata, blocks, and an experiment map.
 - **Runtime layout:** local directory structure under `data/`.

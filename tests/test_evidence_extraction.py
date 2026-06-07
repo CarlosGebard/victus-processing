@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from src.application.ports.llm import LLMRequest, LLMResponse
-from src.application.pdf_processing.evidence import (
+from src.application.evidence_extraction.evidence import (
     build_classifier_input,
     build_experiment_packets,
     build_trimmed_paper,
@@ -26,7 +26,7 @@ class FakeEvidenceLLM:
 
     async def acomplete(self, request: LLMRequest) -> LLMResponse:
         self.requests.append(request)
-        if request.operation == "pdf_processing.paper_classifier":
+        if request.operation == "evidence_extraction.paper_classifier":
             return LLMResponse(
                 text=json.dumps(
                     {
@@ -44,7 +44,7 @@ class FakeEvidenceLLM:
                     }
                 )
             )
-        if request.operation == "pdf_processing.experiment_scope_mapper":
+        if request.operation == "evidence_extraction.results_scope_mapper":
             return LLMResponse(
                 text=json.dumps(
                     {
@@ -66,7 +66,7 @@ class FakeEvidenceLLM:
                     }
                 )
             )
-        if request.operation == "pdf_processing.canonical_evidence_extractor":
+        if request.operation == "evidence_extraction.canonical_evidence_extractor":
             return LLMResponse(
                 text=json.dumps(
                     {
@@ -119,7 +119,7 @@ class FakeNonPrimaryLLM:
 
     async def acomplete(self, request: LLMRequest) -> LLMResponse:
         self.requests.append(request)
-        if request.operation == "pdf_processing.paper_classifier":
+        if request.operation == "evidence_extraction.paper_classifier":
             return LLMResponse(
                 text=json.dumps(
                     {
@@ -365,10 +365,10 @@ def test_run_pdf_evidence_writes_prompt_contract_outputs(tmp_path: Path) -> None
     ]
     assert set(canonical) == {"canonical_evidence", "unextracted_packet_items"}
     assert [request.operation for request in llm.requests] == [
-        "pdf_processing.paper_classifier",
-        "pdf_processing.experiment_scope_mapper",
-        "pdf_processing.canonical_evidence_extractor",
-        "pdf_processing.canonical_evidence_extractor",
+        "evidence_extraction.paper_classifier",
+        "evidence_extraction.results_scope_mapper",
+        "evidence_extraction.canonical_evidence_extractor",
+        "evidence_extraction.canonical_evidence_extractor",
     ]
 
 
@@ -389,4 +389,4 @@ def test_run_pdf_evidence_skips_non_primary_research_after_classification(tmp_pa
     assert (paper_dir / "paper.classifier_input.json").exists()
     assert (paper_dir / "paper.classification.json").exists()
     assert not (paper_dir / "trimmed.json").exists()
-    assert [request.operation for request in llm.requests] == ["pdf_processing.paper_classifier"]
+    assert [request.operation for request in llm.requests] == ["evidence_extraction.paper_classifier"]

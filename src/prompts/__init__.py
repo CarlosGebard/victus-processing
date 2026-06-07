@@ -4,18 +4,18 @@ from importlib import resources
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.application.metadata.paper_selector import PaperCandidate
+    from src.application.metadata_extraction.paper_selector import PaperCandidate
 
 
 def _read_prompt(filename: str) -> str:
     return resources.files(__package__).joinpath(filename).read_text(encoding="utf-8")
 
 
-PAPER_SELECTOR_SYSTEM_PROMPT = _read_prompt("paper_selector_system.md")
-PAPER_SELECTOR_GAP_SYSTEM_PROMPT = _read_prompt("paper_selector_dataset_gaps_system.md")
+PAPER_SELECTOR_SYSTEM_PROMPT = _read_prompt("metadata_extraction/paper_selector.md")
+PAPER_SELECTOR_GAP_SYSTEM_PROMPT = _read_prompt("metadata_extraction/paper_selector_dataset_gaps.md")
 
 
-def get_paper_selector_system_prompt(selection_profile: str = "broad-nutrition") -> str:
+def get_paper_selector_prompt(selection_profile: str = "broad-nutrition") -> str:
     if selection_profile in {"broad-nutrition", "nutrition-rag"}:
         return PAPER_SELECTOR_SYSTEM_PROMPT
     if selection_profile == "dataset-gaps":
@@ -44,5 +44,5 @@ __all__ = [
     "PAPER_SELECTOR_GAP_SYSTEM_PROMPT",
     "PAPER_SELECTOR_SYSTEM_PROMPT",
     "build_paper_selector_user_prompt",
-    "get_paper_selector_system_prompt",
+    "get_paper_selector_prompt",
 ]

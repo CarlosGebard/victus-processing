@@ -3,8 +3,6 @@ id: ADR-001-TESTING-WORKSPACE-PER-PAPER
 title: Per-Paper Testing Workspace
 status: accepted
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_docs:
   - VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
   - VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT
@@ -28,7 +26,7 @@ Docling during testing wastes time and makes iteration slower.
 
 ## 2. Decision
 
-`pdf-processing testing` writes a complete per-paper review workspace under
+`testing-pipeline run` writes a complete per-paper review workspace under
 `data/testing/{paper_id}/`.
 
 The testing workspace contains the source PDF copy, `paper.md`, Markdown batch
@@ -59,7 +57,7 @@ Negative:
 
 - Merge `data/runtime/02-pdfs` and `data/runtime/03-pdf_processing`.
   Rejected because it mixes source inputs with derived artifacts and weakens
-  stage ownership.
+  stage boundaries.
 - Copy artifacts after a normal runtime run.
   Rejected because post-hoc copying can drift from the actual testing outputs.
 - Always rerun Docling during testing.

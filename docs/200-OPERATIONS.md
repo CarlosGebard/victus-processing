@@ -57,16 +57,16 @@ uv run victus-processing --help
 Run the main local flow:
 
 ```bash
-uv run victus-processing metadata explore --mode broad-nutrition
-uv run victus-processing pdfs normalize
+uv run victus-processing metadata-extraction explore --mode broad-nutrition
+uv run victus-processing metadata-to-pdf normalize-pdfs
 uv run victus-processing pdf-processing run
-uv run victus-processing pdf-processing evidence
+uv run victus-processing evidence-extraction run
 ```
 
 Run a single DOI metadata fetch:
 
 ```bash
-uv run victus-processing metadata from-doi --doi 10.1000/demo
+uv run victus-processing metadata-extraction from-doi --doi 10.1000/demo
 ```
 
 Run smoke validation:
@@ -99,7 +99,6 @@ Common variables:
 - `PROMPT_LABEL`
 - `PROMPTS_LOCAL_DIR`
 - `DEFAULT_LLM_MODEL`
-- `DEFAULT_LLM_MAX_TOKENS`
 
 Infisical helper:
 
@@ -113,6 +112,8 @@ Prompt Management:
 - Langfuse Prompt Management is the primary prompt source when Langfuse
   credentials are injected.
 - Local markdown prompts under `src/prompts/local/` are fallback prompts.
+- Local prompt defaults do not set `max_tokens`; explicit stage config or remote
+  prompt config must provide output-token limits.
 - LiteLLM remains the execution adapter and does not fetch prompts.
 
 Configuration contracts and stable path expectations live in
@@ -149,7 +150,7 @@ Operational inspection sources:
   or evidence commands fail.
 - Missing `SEMANTIC_SCHOLAR_API_KEY`: Semantic Scholar may run with stricter
   public rate limits.
-- LLM 429/5xx/network errors: LiteLLM owns retries, fallbacks, provider routing,
+- LLM 429/5xx/network errors: LiteLLM handles retries, fallbacks, provider routing,
   and quota behavior.
 - Missing PDFs: ensure normalized PDFs exist under
   `data/runtime/02-pdfs/active/`.
@@ -158,7 +159,7 @@ Operational inspection sources:
 
 ## 8. Operational Boundaries
 
-Operations owns:
+Operations covers:
 
 - runtime execution workflows;
 - configuration and secret-loading guidance;
@@ -166,7 +167,7 @@ Operations owns:
 - observability and recovery guidance;
 - runbook navigation.
 
-Operations does not own:
+Operations does not cover:
 
 - architecture reasoning;
 - stable contracts and invariants;
@@ -180,4 +181,5 @@ Operations does not own:
 - [Contracts](300-CONTRACTS.md)
 - [CLI operations](operations/cli.md)
 - [PDF processing operations](operations/pdf-processing.md)
+- [Pipeline runbooks](operations/pipelines/)
 - [Runbooks](operations/runbooks/)

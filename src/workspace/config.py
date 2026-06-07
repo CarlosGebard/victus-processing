@@ -307,7 +307,6 @@ DEFAULT_LLM_MODEL = (
     get_env_or_config("DEFAULT_LLM_MODEL", default="litellm_proxy/gemini-flash-lite")
     or "litellm_proxy/gemini-flash-lite"
 )
-DEFAULT_LLM_MAX_TOKENS = int(get_env_or_config("DEFAULT_LLM_MAX_TOKENS", default="4096") or "4096")
 
 REGISTRY_FILE = REGISTRY_DIR / "documents.jsonl"
 BIB_OUTPUT_FILE = METADATA_DIR / "papers.bib"
@@ -334,6 +333,6 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
 
 @lru_cache(maxsize=1)
 def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[int, int]]:
-    from src.application.pdf_extraction.normalization import sync_raw_pdfs_into_input
+    from src.application.metadata_to_pdf.normalization import sync_raw_pdfs_into_input
 
     return sync_raw_pdfs_into_input

@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-GHCR-RUNBOOK
 title: Victus Processing GitHub Container Registry Runbook
 status: source-of-truth
 updated_at: 2026-05-27
-owners:
-  - architecture
 tags:
   - operations
   - runbook

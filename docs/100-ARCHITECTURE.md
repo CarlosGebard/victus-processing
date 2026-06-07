@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
 status: active
 updated_at: 2026-06-03
-owners:
-  - architecture
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-CONTRACTS
@@ -45,7 +43,7 @@ files, not hidden in memory or remote services.
 - **Inputs:** user arguments.
 - **Outputs:** invoked stage behavior and CLI status output.
 - **Dependencies:** domain modules.
-- **Boundary:** owns command grouping, not stage internals.
+- **Boundary:** covers command grouping, not stage internals.
 
 ### Workspace Configuration
 
@@ -55,27 +53,27 @@ files, not hidden in memory or remote services.
 - **Inputs:** `config/*.yaml`, optional `config.yaml`, environment variables.
 - **Outputs:** resolved paths and runtime constants.
 - **Dependencies:** local filesystem.
-- **Boundary:** owns resolution, not business processing.
+- **Boundary:** covers resolution, not business processing.
 
-### Metadata Stage
+### Metadata Extraction Stage
 
-- **Path:** `src/application/metadata/`
+- **Path:** `src/application/metadata_extraction/`
 - **Responsibility:** discover, fetch, classify, and store paper metadata
   candidates.
 - **Inputs:** seed DOI queues, DOI arguments, Semantic Scholar responses.
 - **Outputs:** metadata JSON, reviewed indexes, discarded indexes.
 - **Dependencies:** Semantic Scholar API, internal LLM client port.
-- **Boundary:** owns pre-PDF candidate state.
+- **Boundary:** covers pre-PDF candidate state.
 
-### PDF Extraction and Normalization
+### Metadata To PDF Stage
 
-- **Path:** `src/application/pdf_extraction/`
+- **Path:** `src/application/metadata_to_pdf/`
 - **Responsibility:** generate bibliography outputs and normalize raw PDFs into
   active pipeline inputs.
 - **Inputs:** metadata records, relation CSV files, raw PDFs.
 - **Outputs:** BibTeX artifacts and active PDFs.
 - **Dependencies:** local filesystem.
-- **Boundary:** owns conversion into PDF-processing inputs.
+- **Boundary:** covers conversion into PDF-processing inputs.
 
 ### PDF Processing Stage
 
@@ -85,19 +83,30 @@ files, not hidden in memory or remote services.
 - **Inputs:** active PDFs, prompt files, PDF-processing config.
 - **Outputs:** Markdown, raw batch JSON, merged structured paper JSON, status.
 - **Dependencies:** Docling, internal LLM client port.
-- **Boundary:** owns post-PDF structured paper artifacts.
+- **Boundary:** covers post-PDF structured paper artifacts.
 
 ### Evidence Stages
 
-- **Path:** planned under `src/application/`.
-- **Responsibility:** trim structured blocks, map explicit experimental scopes,
-  and extract canonical evidence.
+- **Path:** `src/application/evidence_extraction/`
+- **Responsibility:** classify processed papers, trim structured blocks, map
+  explicit experimental scopes, build packets, and extract canonical evidence.
 - **Inputs:** metadata, blocks, experiment-scope prompt outputs, canonical
   evidence prompt outputs.
 - **Outputs:** trimmed paper JSON, experiment map JSON, canonical evidence JSON.
 - **Dependencies:** internal LLM client port.
-- **Boundary:** owns paper-level evidence normalization, not downstream
+- **Boundary:** covers paper-level evidence normalization, not downstream
   retrieval, synthesis, recommendations, or analytics.
+
+### Testing Pipeline
+
+- **Path:** `src/application/testing_pipeline/`
+- **Responsibility:** prepare per-paper review folders and testing artifacts.
+- **Inputs:** active PDFs, optional reused Markdown, PDF-processing outputs,
+  evidence outputs.
+- **Outputs:** `data/testing/{paper_id}/` review workspaces.
+- **Dependencies:** PDF-processing and evidence-extraction stages.
+- **Boundary:** covers local review artifact assembly, not production runtime
+  artifact storage.
 
 ### Prompt Assets
 
@@ -117,7 +126,7 @@ Internal boundaries:
 - Configuration/path resolution is separated from processing logic.
 - Metadata is pre-PDF state.
 - PDF-processing is post-PDF structured extraction.
-- Canonical evidence is the downstream derived output owned by this repository.
+- Canonical evidence is the downstream derived output produced by this repository.
 - Canonical evidence is the active downstream extraction terminology.
 - Prompts are separate artifacts consumed by model-mediated stages.
 

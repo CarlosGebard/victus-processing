@@ -26,17 +26,17 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     "args",
     [
         (),
-        ("metadata", "--help"),
-        ("metadata", "explore", "--help"),
-        ("metadata", "from-doi", "--help"),
-        ("metadata", "seed-dois", "--help"),
-        ("bib", "generate", "--help"),
-        ("pdfs", "normalize", "--help"),
+        ("metadata-extraction", "--help"),
+        ("metadata-extraction", "explore", "--help"),
+        ("metadata-extraction", "from-doi", "--help"),
+        ("metadata-extraction", "seed-dois", "--help"),
+        ("metadata-to-pdf", "generate-bib", "--help"),
+        ("metadata-to-pdf", "normalize-pdfs", "--help"),
         ("pdf-processing", "--help"),
         ("pdf-processing", "run", "--help"),
         ("pdf-processing", "markdown", "--help"),
-        ("pdf-processing", "evidence", "--help"),
-        ("pdf-processing", "testing", "--help"),
+        ("evidence-extraction", "run", "--help"),
+        ("testing-pipeline", "run", "--help"),
         ("bridge", "--help"),
         ("data-layout", "create", "--help"),
     ],
@@ -52,7 +52,15 @@ def test_main_help_exposes_domain_contract_groups() -> None:
     result = run_cli("--help")
 
     assert result.returncode == 0
-    for group in ("metadata", "bib", "pdfs", "pdf-processing", "bridge", "data-layout"):
+    for group in (
+        "metadata-extraction",
+        "metadata-to-pdf",
+        "pdf-processing",
+        "evidence-extraction",
+        "testing-pipeline",
+        "bridge",
+        "data-layout",
+    ):
         assert group in result.stdout
 
 
@@ -60,14 +68,14 @@ def test_main_prints_help_when_no_command(capsys) -> None:
     parser = cli.build_parser()
     parser.print_help()
     captured = capsys.readouterr()
-    assert "metadata" in captured.out
+    assert "metadata-extraction" in captured.out
     assert "pdf-processing" in captured.out
 
 
 def test_main_routes_metadata_explore(monkeypatch) -> None:
     called: list[str] = []
 
-    monkeypatch.setattr(sys, "argv", ["cli.py", "metadata", "explore", "--mode", "dataset-gaps"])
+    monkeypatch.setattr(sys, "argv", ["cli.py", "metadata-extraction", "explore", "--mode", "dataset-gaps"])
     monkeypatch.setattr(cli, "run_metadata_exploration_flow", lambda mode, **kwargs: called.append(mode))
 
     cli.main()
@@ -78,7 +86,7 @@ def test_main_routes_metadata_explore(monkeypatch) -> None:
 def test_main_routes_metadata_seed_dois(monkeypatch, tmp_path: Path) -> None:
     called: list[dict[str, object]] = []
     terms_file = tmp_path / "terms.txt"
-    metadata_dir = tmp_path / "metadata"
+    metadata_dir = tmp_path / "metadata-extraction"
     terms_file.write_text("diet\n", encoding="utf-8")
     metadata_dir.mkdir()
     output_file = tmp_path / "generated_seed_dois.jsonl"
@@ -87,7 +95,7 @@ def test_main_routes_metadata_seed_dois(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
-        ["cli.py", "metadata", "seed-dois", "--mode", "broad-nutrition"],
+        ["cli.py", "metadata-extraction", "seed-dois", "--mode", "broad-nutrition"],
     )
     monkeypatch.setattr(cli.ctx, "METADATA_DIR", metadata_dir)
     monkeypatch.setattr(cli.ctx, "EXPLORATION_COMPLETED_SEED_DOI_FILE", explored_file)
@@ -122,7 +130,7 @@ def test_main_routes_bib_generate(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
-        ["cli.py", "bib", "generate", "--output", str(output), "--input-csv", str(input_csv)],
+        ["cli.py", "metadata-to-pdf", "generate-bib", "--output", str(output), "--input-csv", str(input_csv)],
     )
     monkeypatch.setattr(cli, "generate_bib_flow", lambda target, source_csv: called.append((target, source_csv)))
 
@@ -248,8 +256,7 @@ def test_main_routes_pdf_processing_evidence(monkeypatch, tmp_path: Path) -> Non
         "argv",
         [
             "cli.py",
-            "pdf-processing",
-            "evidence",
+            "evidence-extraction", "run",
             "--input",
             str(input_path),
             "--output-dir",
@@ -294,8 +301,7 @@ def test_main_routes_pdf_processing_testing_pipeline(monkeypatch, tmp_path: Path
         "argv",
         [
             "cli.py",
-            "pdf-processing",
-            "testing",
+            "testing-pipeline", "run",
             "--pdf-dir",
             str(pdf_dir),
             "--output-dir",
@@ -391,8 +397,7 @@ def test_main_routes_pdf_processing_testing_reuse_markdown(monkeypatch, tmp_path
         "argv",
         [
             "cli.py",
-            "pdf-processing",
-            "testing",
+            "testing-pipeline", "run",
             "--pdf-dir",
             str(pdf_dir),
             "--markdown-dir",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.workspace import config as ctx
-from src.application.pdf_extraction.normalization import _default_relations_csv_from_metadata_dir, sync_raw_pdfs_from_relations
+from src.application.metadata_to_pdf.normalization import _default_relations_csv_from_metadata_dir, sync_raw_pdfs_from_relations
 
 
 def list_pdf_candidates() -> list[Path]:

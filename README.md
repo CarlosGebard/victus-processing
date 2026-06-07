@@ -32,10 +32,10 @@ uv run victus-processing data-layout create
 Run the main local flow:
 
 ```bash
-uv run victus-processing metadata explore --mode broad-nutrition
-uv run victus-processing pdfs normalize
+uv run victus-processing metadata-extraction explore --mode broad-nutrition
+uv run victus-processing metadata-to-pdf normalize-pdfs
 uv run victus-processing pdf-processing run
-uv run victus-processing pdf-processing evidence
+uv run victus-processing evidence-extraction run
 ```
 
 ## Validate
@@ -64,7 +64,7 @@ This repository owns:
 - LLM canonical evidence extraction outputs via LiteLLM;
 - local runtime contracts under `data/`.
 
-This repository does not own:
+This repository does not cover:
 
 - analytics products;
 - RAG indexing or vector stores;

@@ -3,12 +3,10 @@ id: VICTUS-PROCESSING-PAPER-CLASSIFICATION-CONTRACT
 title: Victus Processing Paper Classification Contract
 status: source-of-truth
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_components:
-  - src.application.pdf_processing.evidence
-  - src.application.pdf_processing.llm_evidence
-  - src.prompts.paper_classifier
+  - src.application.evidence_extraction.evidence
+  - src.application.evidence_extraction.llm_evidence
+  - src.prompts.evidence_extraction.paper_classifier
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
   - VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT

@@ -21,7 +21,7 @@ from src.workspace.config import (
 from src.workspace.artifacts import build_base_name, normalize_doi
 from src.application.ports.llm import LLMClient
 from src.application.ports.prompt_registry import PromptRegistry
-from src.application.metadata.paper_selector import PaperCandidate, classify_papers_with_llm
+from src.application.metadata_extraction.paper_selector import PaperCandidate, classify_papers_with_llm
 
 
 config = get_config()

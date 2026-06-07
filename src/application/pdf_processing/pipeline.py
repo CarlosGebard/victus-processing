@@ -27,11 +27,11 @@ def load_pdf_processing_config() -> PdfProcessingConfig:
         workers=int(cfg.get("workers", 1)),
         prompt_first_batch=ctx.resolve_project_path(
             cfg.get("prompt_first_batch"),
-            ctx.ROOT_DIR / "src/prompts/md_to_json_first.md",
+            ctx.ROOT_DIR / "src/prompts/pdf_processing/markdown_first_batch.md",
         ),
         prompt_continuation_batch=ctx.resolve_project_path(
             cfg.get("prompt_continuation_batch"),
-            ctx.ROOT_DIR / "src/prompts/md_to_json_next.md",
+            ctx.ROOT_DIR / "src/prompts/pdf_processing/markdown_continuation_batch.md",
         ),
         markdown_batch_chars=int(cfg.get("markdown_batch_chars", 6000)),
         markdown_batch_soft_limit_chars=int(cfg.get("markdown_batch_soft_limit_chars", 9000)),
@@ -57,10 +57,10 @@ def _load_prompt(
     *,
     name: str,
     label: str,
-    legacy_path: Path,
+    local_path: Path,
 ) -> tuple[str, PromptSpec | None]:
     if registry is None:
-        return _read_prompt(legacy_path), None
+        return _read_prompt(local_path), None
     spec = registry.get(name, label=label)
     return spec.template, spec
 
@@ -282,15 +282,15 @@ async def run_pdf_processing_async(
 
         first_template, first_spec = _load_prompt(
             prompt_registry,
-            name="paper-md-to-json",
+            name="pdf_processing/markdown_first_batch",
             label=prompt_label,
-            legacy_path=resolved_config.prompt_first_batch,
+            local_path=resolved_config.prompt_first_batch,
         )
         continuation_template, continuation_spec = _load_prompt(
             prompt_registry,
-            name="paper-md-to-json-continuation",
+            name="pdf_processing/markdown_continuation_batch",
             label=prompt_label,
-            legacy_path=resolved_config.prompt_continuation_batch,
+            local_path=resolved_config.prompt_continuation_batch,
         )
         results: list[dict[str, Any]] = []
         section_registry: list[dict[str, Any]] = []
@@ -462,15 +462,15 @@ async def run_markdown_processing_async(
         client = llm_client
         first_template, first_spec = _load_prompt(
             prompt_registry,
-            name="paper-md-to-json",
+            name="pdf_processing/markdown_first_batch",
             label=prompt_label,
-            legacy_path=resolved_config.prompt_first_batch,
+            local_path=resolved_config.prompt_first_batch,
         )
         continuation_template, continuation_spec = _load_prompt(
             prompt_registry,
-            name="paper-md-to-json-continuation",
+            name="pdf_processing/markdown_continuation_batch",
             label=prompt_label,
-            legacy_path=resolved_config.prompt_continuation_batch,
+            local_path=resolved_config.prompt_continuation_batch,
         )
         results: list[dict[str, Any]] = []
         section_registry: list[dict[str, Any]] = []

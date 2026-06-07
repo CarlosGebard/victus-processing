@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.workspace import config as ctx
-from src.application.pdf_processing.llm_evidence import classify_paper, extract_canonical_evidence, map_experiment_scopes
+from src.application.evidence_extraction.llm_evidence import classify_paper, extract_canonical_evidence, map_experiment_scopes
 from src.application.ports.llm import LLMClient
 from src.application.ports.prompt_registry import PromptRegistry, PromptSpec
 from src.infrastructure.prompts.compile import compile_template
@@ -85,8 +85,8 @@ class EvidenceProcessingConfig:
     output_dir: Path
     model: str
     prompt_paper_classifier: Path
-    prompt_experiment_scope_mapper: Path
-    prompt_canonical_evidence: Path
+    prompt_results_scope_mapper: Path
+    prompt_canonical_evidence_extractor: Path
 
 
 def load_evidence_processing_config() -> EvidenceProcessingConfig:
@@ -96,15 +96,15 @@ def load_evidence_processing_config() -> EvidenceProcessingConfig:
         model=str(cfg.get("model", "litellm_proxy/gemini-flash-lite")),
         prompt_paper_classifier=ctx.resolve_project_path(
             cfg.get("prompt_paper_classifier"),
-            ctx.ROOT_DIR / "src/prompts/paper_classifier.md",
+            ctx.ROOT_DIR / "src/prompts/evidence_extraction/paper_classifier.md",
         ),
-        prompt_experiment_scope_mapper=ctx.resolve_project_path(
-            cfg.get("prompt_experiment_scope_mapper"),
-            ctx.ROOT_DIR / "src/prompts/experiment_scope_mapper.md",
+        prompt_results_scope_mapper=ctx.resolve_project_path(
+            cfg.get("prompt_results_scope_mapper"),
+            ctx.ROOT_DIR / "src/prompts/evidence_extraction/results_scope_mapper.md",
         ),
-        prompt_canonical_evidence=ctx.resolve_project_path(
-            cfg.get("prompt_canonical_evidence"),
-            ctx.ROOT_DIR / "src/prompts/canonical_evidence.md",
+        prompt_canonical_evidence_extractor=ctx.resolve_project_path(
+            cfg.get("prompt_canonical_evidence_extractor"),
+            ctx.ROOT_DIR / "src/prompts/evidence_extraction/canonical_evidence_extractor.md",
         ),
     )
 
@@ -405,9 +405,9 @@ async def run_pdf_evidence_async(
 
     classifier_prompt, classifier_spec = _load_prompt(
         prompt_registry,
-        name="paper_classifier",
+        name="evidence_extraction/paper_classifier",
         label=prompt_label,
-        legacy_path=resolved_config.prompt_paper_classifier,
+        local_path=resolved_config.prompt_paper_classifier,
     )
     classifier_config = classifier_spec.config if classifier_spec else {}
     classification_raw = await classify_paper(
@@ -442,9 +442,9 @@ async def run_pdf_evidence_async(
 
     experiment_prompt, experiment_spec = _load_prompt(
         prompt_registry,
-        name="experiment_scope_mapper",
+        name="evidence_extraction/results_scope_mapper",
         label=prompt_label,
-        legacy_path=resolved_config.prompt_experiment_scope_mapper,
+        local_path=resolved_config.prompt_results_scope_mapper,
     )
     experiment_config = experiment_spec.config if experiment_spec else {}
     experiment_map_raw = await map_experiment_scopes(
@@ -465,9 +465,9 @@ async def run_pdf_evidence_async(
 
     canonical_prompt, canonical_spec = _load_prompt(
         prompt_registry,
-        name="canonical_evidence",
+        name="evidence_extraction/canonical_evidence_extractor",
         label=prompt_label,
-        legacy_path=resolved_config.prompt_canonical_evidence,
+        local_path=resolved_config.prompt_canonical_evidence_extractor,
     )
     canonical_config = canonical_spec.config if canonical_spec else {}
     canonical = {"canonical_evidence": [], "unextracted_packet_items": []}
@@ -552,7 +552,7 @@ def _load_prompt(
     *,
     name: str,
     label: str,
-    legacy_path: Path,
+    local_path: Path,
 ) -> tuple[str, PromptSpec | None]:
     if registry is not None:
         try:
@@ -560,9 +560,9 @@ def _load_prompt(
             return spec.template, spec
         except Exception:
             pass
-    if not legacy_path.exists():
-        raise FileNotFoundError(f"Prompt file not found: {legacy_path}")
-    return legacy_path.read_text(encoding="utf-8"), None
+    if not local_path.exists():
+        raise FileNotFoundError(f"Prompt file not found: {local_path}")
+    return local_path.read_text(encoding="utf-8"), None
 
 
 def _paper_id_from_path_or_payload(path: Path, payload: dict[str, Any]) -> str:

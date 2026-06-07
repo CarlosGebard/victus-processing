@@ -109,10 +109,10 @@ async def extract_markdown_batch(
                 "batch_index": batch.index,
                 "start_char": batch.start_char,
                 "end_char": batch.end_char,
-                "prompt_name": prompt_spec.name if prompt_spec else "legacy.pdf_processing",
+                "prompt_name": prompt_spec.name if prompt_spec else "pdf_processing/local_path",
                 "prompt_version": prompt_spec.version if prompt_spec else None,
                 "prompt_label": prompt_label,
-                "prompt_source": prompt_spec.source if prompt_spec else "legacy",
+                "prompt_source": prompt_spec.source if prompt_spec else "local_path",
             },
         )
     )

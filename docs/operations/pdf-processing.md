@@ -3,8 +3,6 @@ id: VICTUS-PROCESSING-PDF-PROCESSING-OPERATIONS
 title: Victus Processing PDF Processing Operations
 status: source-of-truth
 updated_at: 2026-06-05
-owners:
-  - architecture
 tags:
   - operations
   - pdf-processing
@@ -14,14 +12,13 @@ tags:
 # PDF Processing Operations
 
 PDF processing converts active PDFs into Markdown and structured block JSON.
+Evidence extraction and testing are separate public pipeline interfaces.
 
 Runtime sequence:
 
 ```text
 PDF -> Docling Markdown -> Markdown batches -> LLM JSON -> merged block JSON
   -> processed-paper contract enforcement -> paper.processed.json
-  -> evidence trimming -> experiment map -> experiment packets
-  -> canonical evidence
 ```
 
 Run all active PDFs:
@@ -49,20 +46,10 @@ Run Markdown-only conversion:
 uv run victus-processing pdf-processing markdown --skip-existing
 ```
 
-Generate evidence artifacts from processed paper JSON:
+Next stages:
 
-```bash
-uv run victus-processing pdf-processing evidence
-uv run victus-processing pdf-processing evidence --input data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
-```
-
-Run the complete testing pipeline in per-paper review folders:
-
-```bash
-uv run victus-processing pdf-processing testing
-uv run victus-processing pdf-processing testing --paper-id {paper_id}
-uv run victus-processing pdf-processing testing --paper-id {paper_id} --reuse-markdown
-```
+- [Evidence extraction](pipelines/evidence-extraction.md)
+- [Testing pipeline](pipelines/testing-pipeline.md)
 
 Operational inputs:
 
@@ -112,8 +99,8 @@ max output tokens: provider/model default (`max_tokens: null`)
 
 Prompt and batch-continuity behavior:
 
-- Prompts live under `src/prompts/md_to_json_first.md` and
-  `src/prompts/md_to_json_next.md`.
+- Prompts live under `src/prompts/pdf_processing/markdown_first_batch.md` and
+  `src/prompts/pdf_processing/markdown_continuation_batch.md`.
 - Continuation batches receive accumulated `section_registry` and
   `batch_end` state from prior batches.
 - Current prompt registry entries use `original_title`, `canonical_title`,
@@ -128,7 +115,7 @@ Final block behavior:
 - `paper.final.json` blocks preserve the
   [Block Contract](../contracts/block.md).
 - Evidence trimming keeps only methods, results, discussion, and conclusion.
-- The evidence-stage handoff contains only `metadata` and `blocks`.
+- The evidence-stage handoff contains only `metadata-extraction` and `blocks`.
 - Blocks are the unit of downstream information and localization.
 
 Operational outputs:
@@ -138,42 +125,6 @@ Operational outputs:
 - `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
 - `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`;
 - `data/runtime/03-pdf_processing/processing_status.jsonl`.
-
-Testing pipeline outputs:
-
-- `data/testing/{paper_id}/source.pdf`;
-- `data/testing/{paper_id}/paper.md`;
-- `data/testing/{paper_id}/markdown_batches/`;
-- `data/testing/{paper_id}/raw_batches/`;
-- `data/testing/{paper_id}/paper.processed.json`;
-- `data/testing/{paper_id}/paper.final.json`;
-- `data/testing/{paper_id}/paper.classifier_input.json`;
-- `data/testing/{paper_id}/paper.classification.json`;
-- `data/testing/{paper_id}/evidence_skipped.json` for non-primary papers;
-- `data/testing/{paper_id}/trimmed.json`;
-- `data/testing/{paper_id}/experiment_map.json`;
-- `data/testing/{paper_id}/experiment_packets.json`;
-- `data/testing/{paper_id}/canonical_evidence.json`.
-
-Evidence handoff:
-
-- current PDF-processing writes compatibility `paper.final.json`;
-- the active evidence pipeline first builds `paper.classifier_input.json`;
-- `paper_classifier` writes `paper.classification.json`;
-- only `primary_research` papers continue to evidence extraction;
-- non-primary papers write `evidence_skipped.json` and stop before trimming;
-- primary papers then produce trimmed `metadata + blocks`;
-- experiment scope mapping consumes blocks and maps scopes to block ids;
-- experiment packet construction deterministically expands each scope into the
-  exact block packet for one extraction pass;
-- canonical evidence extraction consumes one experiment packet per LLM call.
-
-Evidence outputs:
-
-- `data/runtime/04-evidence/{paper_id}/trimmed.json`;
-- `data/runtime/04-evidence/{paper_id}/experiment_map.json`;
-- `data/runtime/04-evidence/{paper_id}/experiment_packets.json`;
-- `data/runtime/04-evidence/{paper_id}/canonical_evidence.json`.
 
 LLM behavior:
 
@@ -190,4 +141,6 @@ Testing notes:
 - successful partial outputs are preserved by paper directory.
 
 Related: [Operations](../200-OPERATIONS.md),
-[Data Layout Contract](../contracts/data-layout.md).
+[Data Layout Contract](../contracts/data-layout.md),
+[Evidence extraction](pipelines/evidence-extraction.md),
+[Testing pipeline](pipelines/testing-pipeline.md).

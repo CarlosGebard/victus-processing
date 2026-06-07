@@ -3,10 +3,8 @@ id: VICTUS-PROCESSING-CANONICAL-EVIDENCE-CONTRACT
 title: Victus Processing Canonical Evidence Contract
 status: source-of-truth
 updated_at: 2026-06-06
-owners:
-  - architecture
 related_components:
-  - src.prompts.canonical_evidence
+  - src.prompts.evidence_extraction.canonical_evidence_extractor
 related_docs:
   - VICTUS-PROCESSING-CONTRACTS
 tags:

@@ -25,8 +25,8 @@ uv run victus-processing data-layout create
 Flujo principal:
 
 ```bash
-uv run victus-processing metadata explore --mode broad-nutrition
-uv run victus-processing pdfs normalize
+uv run victus-processing metadata-extraction explore --mode broad-nutrition
+uv run victus-processing metadata-to-pdf normalize-pdfs
 uv run victus-processing pdf-processing run
 ```
 

@@ -13,7 +13,6 @@ def build_prompt_registry() -> PromptRegistry:
         default_config={
             "model": ctx.DEFAULT_LLM_MODEL,
             "temperature": 0,
-            "max_tokens": ctx.DEFAULT_LLM_MAX_TOKENS,
             "response_format": "json",
         },
     )

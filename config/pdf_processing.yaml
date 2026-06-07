@@ -3,8 +3,8 @@ pdf_processing:
   input_dir: "data/runtime/02-pdfs/active"
   output_dir: "data/runtime/03-pdf_processing"
   workers: 1
-  prompt_first_batch: "src/prompts/md_to_json_first.md"
-  prompt_continuation_batch: "src/prompts/md_to_json_next.md"
+  prompt_first_batch: "src/prompts/pdf_processing/markdown_first_batch.md"
+  prompt_continuation_batch: "src/prompts/pdf_processing/markdown_continuation_batch.md"
   markdown_batch_chars: 10000
   markdown_batch_soft_limit_chars: 14000
   markdown_batch_hard_limit_chars: 20000
@@ -15,6 +15,6 @@ pdf_processing:
 evidence:
   output_dir: "data/runtime/04-evidence"
   model: "litellm_proxy/gemini-flash-lite"
-  prompt_paper_classifier: "src/prompts/paper_classifier.md"
-  prompt_experiment_scope_mapper: "src/prompts/experiment_scope_mapper.md"
-  prompt_canonical_evidence: "src/prompts/canonical_evidence.md"
+  prompt_paper_classifier: "src/prompts/evidence_extraction/paper_classifier.md"
+  prompt_results_scope_mapper: "src/prompts/evidence_extraction/results_scope_mapper.md"
+  prompt_canonical_evidence_extractor: "src/prompts/evidence_extraction/canonical_evidence_extractor.md"
