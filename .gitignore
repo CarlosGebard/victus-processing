@@ -5,6 +5,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.cache/
 .mypy_cache/
 .ruff_cache/
 *.pyc
@@ -23,6 +24,4 @@ scripts/heuristics_model/src/heuristics_model.egg-info/
 scripts/heuristics_model/tests/__pycache__/
 
 # Pipeline data
-data/
-
-
+/data/

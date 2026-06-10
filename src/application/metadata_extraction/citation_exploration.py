@@ -73,15 +73,11 @@ def normalize_selection_mode(selection_mode: str) -> str:
     normalized = str(selection_mode or "").strip()
     if normalized in {"broad-nutrition", "nutrition-rag", "nutrition"}:
         return "broad-nutrition"
-    if normalized == "dataset-gaps":
-        return "dataset-gaps"
     raise ValueError(f"Selection mode no soportado: {selection_mode}")
 
 
 def discarded_index_mode(selection_mode: str | None) -> str:
-    normalized = normalize_selection_mode(selection_mode or "broad-nutrition")
-    if normalized == "dataset-gaps":
-        return "dataset_gap"
+    normalize_selection_mode(selection_mode or "broad-nutrition")
     return "dataset_nutrition"
 
 
@@ -909,23 +905,6 @@ def explore_with_nutrition_rag(
     )
 
 
-def explore_with_dataset_gaps(
-    seed_dois: list[str] | None = None,
-    *,
-    llm_client: LLMClient,
-    prompt_registry: PromptRegistry | None = None,
-    prompt_label: str = "production",
-) -> None:
-    explore_with_llm_selection(
-        seed_dois=seed_dois,
-        selection_mode="dataset-gaps",
-        summary_label="dataset-gaps",
-        llm_client=llm_client,
-        prompt_registry=prompt_registry,
-        prompt_label=prompt_label,
-    )
-
-
 def run_nutrition_rag_exploration(
     *,
     llm_client: LLMClient,
@@ -934,20 +913,6 @@ def run_nutrition_rag_exploration(
 ) -> None:
     _run_llm_selection_exploration(
         "broad-nutrition",
-        llm_client=llm_client,
-        prompt_registry=prompt_registry,
-        prompt_label=prompt_label,
-    )
-
-
-def run_dataset_gaps_exploration(
-    *,
-    llm_client: LLMClient,
-    prompt_registry: PromptRegistry | None = None,
-    prompt_label: str = "production",
-) -> None:
-    _run_llm_selection_exploration(
-        "dataset-gaps",
         llm_client=llm_client,
         prompt_registry=prompt_registry,
         prompt_label=prompt_label,
@@ -993,14 +958,6 @@ def _run_llm_selection_exploration(
 
     if normalized_mode == "broad-nutrition":
         explore_with_nutrition_rag(
-            pending_seed_dois,
-            llm_client=llm_client,
-            prompt_registry=prompt_registry,
-            prompt_label=prompt_label,
-        )
-        return
-    if normalized_mode == "dataset-gaps":
-        explore_with_dataset_gaps(
             pending_seed_dois,
             llm_client=llm_client,
             prompt_registry=prompt_registry,

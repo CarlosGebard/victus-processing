@@ -4,9 +4,11 @@ import argparse
 from pathlib import Path
 
 from src.workspace import config as ctx
+from src.workspace.pipeline_context import PipelineRunContext
+from src.workspace.runs import config_hash, content_hash_file
 from src.workspace.data_layout import create_data_layout
 from src.application.metadata_to_pdf.json_to_bib import generate_bib_flow
-from src.application.metadata_extraction import gap_seed_dois, seed_dois
+from src.application.metadata_extraction import seed_dois
 from src.application.metadata_to_pdf import normalize_from_relations
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
 from src.application.pdf_processing.pipeline import (
@@ -23,12 +25,21 @@ from src.infrastructure.prompts.factory import build_prompt_registry
 
 run_metadata_exploration_flow = None
 
+HELP_WIDTH = 120
+
 
 CLI_DESCRIPTION = (
-    "CLI profesional para el pipeline de papers. "
-    "Organizada por pipelines: metadata-extraction, metadata-to-pdf, "
-    "pdf-processing, evidence-extraction y testing-pipeline."
+    "CLI para el procesamiento de papers del sistema Victus."
 )
+
+
+def _help_formatter(prog: str) -> argparse.HelpFormatter:
+    return argparse.HelpFormatter(prog, width=HELP_WIDTH, max_help_position=34)
+
+
+def _add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser], name: str, **kwargs) -> argparse.ArgumentParser:
+    kwargs.setdefault("formatter_class", _help_formatter)
+    return subparsers.add_parser(name, **kwargs)
 
 
 def _resolved(path: Path) -> Path:
@@ -37,6 +48,31 @@ def _resolved(path: Path) -> Path:
 
 def _optional_resolved(path: Path | None) -> Path | None:
     return _resolved(path) if path is not None else None
+
+
+def _command_subparsers(parser: argparse.ArgumentParser, dest: str) -> argparse._SubParsersAction[argparse.ArgumentParser]:
+    parser._positionals.title = "commands"
+    return parser.add_subparsers(dest=dest, title="commands", metavar="COMMAND")
+
+
+def _observability_dirs_for_output(output_path: Path) -> tuple[Path | None, Path | None, Path | None]:
+    resolved = output_path.expanduser().resolve()
+    try:
+        resolved.relative_to(ctx.DATA_DIR.resolve())
+    except ValueError:
+        root = resolved.parent / ".victus-observability"
+        return root / "lake", root / "runtime/runs", root / "registry"
+    return ctx.DATA_LAKE_DIR, ctx.DATA_RUNTIME_RUNS_DIR, ctx.DATA_REGISTRY_DIR
+
+
+def _pipeline_record_store():
+    if not ctx.VICTUS_PIPELINE_POSTGRES_ENABLED:
+        return None
+    if not ctx.VICTUS_PIPELINE_POSTGRES_DSN.strip():
+        raise SystemExit("ERROR: VICTUS_PIPELINE_POSTGRES_DSN is required when VICTUS_PIPELINE_POSTGRES_ENABLED=true.")
+    from src.infrastructure.postgres.pipeline_store import PostgresPipelineRecordStore
+
+    return PostgresPipelineRecordStore(ctx.VICTUS_PIPELINE_POSTGRES_DSN)
 
 
 def cmd_metadata_explore(args: argparse.Namespace) -> None:
@@ -82,6 +118,16 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
             raise SystemExit(f"No existe metadata_dir: {metadata_dir}")
         if not terms_file.exists():
             raise SystemExit(f"No existe terms_file: {terms_file}")
+        context = _start_seed_context(args, output_path)
+        attempt = context.stage_attempt(stage="seed.load")
+        attempt.event(
+            event_type="stage_started",
+            severity="info",
+            status="started",
+            message="Seed DOI generation started",
+            action="stage.started",
+            metadata={"mode": args.mode},
+        )
 
         keywords = seed_dois.load_keyword_dictionary(terms_file)
         explored_dois = seed_dois.load_explored_dois(explored_dois_file)
@@ -92,6 +138,38 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
             min_citations=max(0, int(args.min_citations)),
         )
         written = seed_dois.write_doi_output(rows, output_path, limit=max(0, int(args.limit)))
+        if output_path.exists():
+            artifact = attempt.register_artifact(
+                artifact_type="seed-dois",
+                artifact_version="v1",
+                storage_uri=ctx.display_path(output_path),
+                storage_backend="local_fs",
+                content_format="jsonl",
+                size_bytes=output_path.stat().st_size,
+                checksum=content_hash_file(output_path),
+                contract_version="seed-dois:v1",
+                metadata={"written": written, "candidates_found": len(rows)},
+            )
+            attempt.event(
+                event_type="artifact_created",
+                severity="info",
+                status="succeeded",
+                message="Seed DOI output written",
+                action="artifact.created",
+                artifact_id=artifact["artifact_id"],
+                artifact_path=ctx.display_path(output_path),
+                contract_version="seed-dois:v1",
+                metadata={"written": written},
+            )
+        attempt.event(
+            event_type="stage_succeeded",
+            severity="info",
+            status="succeeded",
+            message="Seed DOI generation completed",
+            action="stage.succeeded",
+            metadata={"written": written, "candidates_found": len(rows)},
+        )
+        context.finish(status="succeeded", summary={"written": written, "candidates_found": len(rows)})
 
         print("Metadata seed DOI candidates")
         print(f"- metadata_dir:     {ctx.display_path(metadata_dir)}")
@@ -108,53 +186,32 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
                 f"matched={', '.join(row['matched_keywords'][:3])} | title={row['title']}"
             )
         return
-    if args.mode == "dataset-gaps":
-        papers_csv = ctx.PRE_INGESTION_PAPERS_CSV.resolve()
-        unclassified_csv = (ctx.PRE_INGESTION_AUDIT_DIR / "unclassified_papers.csv").resolve()
-        metadata_dir = ctx.METADATA_DIR.resolve()
-        explored_dois_file = ctx.EXPLORATION_COMPLETED_SEED_DOI_FILE.resolve()
-        topics_file = gap_seed_dois.DEFAULT_TOPICS_FILE.resolve()
-        output_path = gap_seed_dois.DEFAULT_OUTPUT_FILE.resolve()
-        if not papers_csv.exists():
-            raise SystemExit(f"No existe papers_csv: {papers_csv}")
-        if not metadata_dir.exists():
-            raise SystemExit(f"No existe metadata_dir: {metadata_dir}")
-        if not topics_file.exists():
-            raise SystemExit(f"No existe topics_file: {topics_file}")
-
-        topics = gap_seed_dois.load_gap_topics(topics_file)
-        metadata_index = gap_seed_dois.load_metadata_index(metadata_dir)
-        explored_dois = gap_seed_dois.load_explored_dois(explored_dois_file)
-        papers_rows = gap_seed_dois.load_paper_rows(papers_csv)
-        unclassified_rows = gap_seed_dois.load_paper_rows(unclassified_csv)
-        rows = gap_seed_dois.collect_gap_seed_rows(
-            papers_rows=papers_rows,
-            unclassified_rows=unclassified_rows,
-            metadata_index=metadata_index,
-            explored_dois=explored_dois,
-            topics=topics,
-            min_citations=max(0, int(args.min_citations)),
-        )
-        written = gap_seed_dois.write_doi_output(rows, output_path, limit=max(0, int(args.limit)))
-
-        print("Metadata gap seed DOI candidates")
-        print(f"- papers_csv:        {ctx.display_path(papers_csv)}")
-        print(f"- unclassified_csv:  {ctx.display_path(unclassified_csv)}")
-        print(f"- metadata_dir:      {ctx.display_path(metadata_dir)}")
-        print(f"- explored_dois:     {ctx.display_path(explored_dois_file)}")
-        print(f"- topics_file:       {ctx.display_path(topics_file)}")
-        print(f"- output:            {ctx.display_path(output_path)}")
-        print(f"- min_citations:     {max(0, int(args.min_citations))}")
-        print(f"- topics_loaded:     {len(topics)}")
-        print(f"- candidates_found:  {len(rows)}")
-        print(f"- dois_written:      {written}")
-        for row in rows[:10]:
-            print(
-                f"  - {row['doi']} | citations={row['citation_count']} | "
-                f"bucket={row['source_bucket']} | matched={', '.join(row['matched_topics'][:3])} | title={row['title']}"
-            )
-        return
     raise ValueError(f"Modo seed-dois no soportado: {args.mode}")
+
+
+def _start_seed_context(args: argparse.Namespace, output_path: Path) -> PipelineRunContext:
+    lake_dir, runtime_runs_dir, registry_dir = _observability_dirs_for_output(output_path)
+    return PipelineRunContext.start(
+        pipeline_name="seed-dois",
+        pipeline_version="v1",
+        execution_mode="stage_only",
+        process_name="victus.processing.seed_ingestion",
+        input_scope={"mode": args.mode, "limit": int(args.limit), "min_citations": int(args.min_citations)},
+        config_hash=config_hash(
+            {
+                "pipeline_name": "seed-dois",
+                "pipeline_version": "v1",
+                "stage": "seed.load",
+                "flags": {"mode": args.mode, "limit": int(args.limit), "min_citations": int(args.min_citations)},
+                "schema_versions": {"event": "pipeline-event:v1"},
+                "contract_versions": {"seed-dois": "seed-dois:v1"},
+            }
+        ),
+        lake_dir=lake_dir,
+        runtime_runs_dir=runtime_runs_dir,
+        registry_dir=registry_dir,
+        record_store=_pipeline_record_store(),
+    )
 
 
 def cmd_bib_generate(args: argparse.Namespace) -> None:
@@ -324,7 +381,8 @@ def cmd_data_layout_create(args: argparse.Namespace) -> None:
 
 def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     default_exploration_mode = str((ctx.CONFIG.get("exploration") or {}).get("mode", "broad-nutrition"))
-    metadata_parser = subparsers.add_parser(
+    metadata_parser = _add_parser(
+        subparsers,
         "metadata-extraction",
         help="Extrae metadata, explora candidatos y genera seeds",
         description=(
@@ -332,11 +390,12 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
             "y generacion de seed DOIs."
         ),
     )
-    metadata_subparsers = metadata_parser.add_subparsers(dest="metadata_command")
+    metadata_subparsers = _command_subparsers(metadata_parser, "metadata_command")
 
-    metadata_explore_parser = metadata_subparsers.add_parser(
+    metadata_explore_parser = _add_parser(
+        metadata_subparsers,
         "explore",
-        help="Explora candidatos y guarda metadata canónica",
+        help="Explora candidatos a partir de seed-dois y guarda metadata",
         description=(
             "Explora candidatos desde seed DOIs y guarda metadata en "
             f"{ctx.display_path(ctx.METADATA_DIR)}."
@@ -344,21 +403,21 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
     )
     metadata_explore_parser.add_argument(
         "--mode",
-        choices=["broad-nutrition", "dataset-gaps"],
+        choices=["broad-nutrition"],
         default=default_exploration_mode,
         help=(
             "Perfil de exploracion. "
-            "broad-nutrition hace barrido amplio de nutricion; "
-            "dataset-gaps prioriza gaps del dataset. "
-            "Ambos consumen la cola configurada en exploration.seed_doi_file. "
+            "broad-nutrition hace barrido amplio de nutricion y consume la cola configurada "
+            "en exploration.seed_doi_file. "
             f"Default config exploration.mode: {default_exploration_mode}."
         ),
     )
     metadata_explore_parser.set_defaults(handler=cmd_metadata_explore)
 
-    metadata_from_doi_parser = metadata_subparsers.add_parser(
+    metadata_from_doi_parser = _add_parser(
+        metadata_subparsers,
         "from-doi",
-        help="Crea un metadata JSON canónico desde un DOI",
+        help="Crea un metadata desde un DOI",
     )
     metadata_from_doi_parser.add_argument("--doi", type=str, required=True, help="DOI del paper")
     metadata_from_doi_parser.add_argument(
@@ -374,19 +433,18 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
     )
     metadata_from_doi_parser.set_defaults(handler=cmd_metadata_from_doi)
 
-    metadata_seed_dois_parser = metadata_subparsers.add_parser(
+    metadata_seed_dois_parser = _add_parser(
+        metadata_subparsers,
         "seed-dois",
-        help="Genera seed DOIs usando perfil broad-nutrition o dataset-gaps",
+        help="Genera seed DOIs usando perfil broad-nutrition",
     )
     metadata_seed_dois_parser.add_argument(
         "--mode",
-        choices=["broad-nutrition", "dataset-gaps"],
+        choices=["broad-nutrition"],
         default="broad-nutrition",
         help=(
             "Perfil de generacion de seeds. "
-            "broad-nutrition usa metadata local + diccionario de keywords; "
-            "dataset-gaps usa pre-ingestion + topics de gaps. "
-            "Cada modo usa sus defaults configurados."
+            "broad-nutrition usa metadata local + diccionario de keywords."
         ),
     )
     metadata_seed_dois_parser.add_argument(
@@ -405,14 +463,16 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
 
 
 def _add_metadata_to_pdf_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    metadata_to_pdf_parser = subparsers.add_parser(
+    metadata_to_pdf_parser = _add_parser(
+        subparsers,
         "metadata-to-pdf",
         help="Genera bibliografia y normaliza PDFs hacia entradas activas",
         description="Convierte metadata y PDFs crudos en PDFs activos normalizados para procesamiento.",
     )
-    metadata_to_pdf_subparsers = metadata_to_pdf_parser.add_subparsers(dest="metadata_to_pdf_command")
+    metadata_to_pdf_subparsers = _command_subparsers(metadata_to_pdf_parser, "metadata_to_pdf_command")
 
-    bib_generate_parser = metadata_to_pdf_subparsers.add_parser(
+    bib_generate_parser = _add_parser(
+        metadata_to_pdf_subparsers,
         "generate-bib",
         help="Genera un archivo .bib",
     )
@@ -425,7 +485,8 @@ def _add_metadata_to_pdf_group(subparsers: argparse._SubParsersAction[argparse.A
     )
     bib_generate_parser.set_defaults(handler=cmd_bib_generate)
 
-    pdfs_normalize_parser = metadata_to_pdf_subparsers.add_parser(
+    pdfs_normalize_parser = _add_parser(
+        metadata_to_pdf_subparsers,
         "normalize-pdfs",
         help=(
             "Normaliza raw PDFs hacia nombres DOI-first usando doi_pdf_relations*.csv "
@@ -465,13 +526,15 @@ def _add_metadata_to_pdf_group(subparsers: argparse._SubParsersAction[argparse.A
 
 def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     defaults = load_pdf_processing_config()
-    pdf_processing_parser = subparsers.add_parser(
+    pdf_processing_parser = _add_parser(
+        subparsers,
         "pdf-processing",
         help="Docling Markdown y extraccion LLM desde PDFs cientificos",
     )
-    pdf_processing_subparsers = pdf_processing_parser.add_subparsers(dest="pdf_processing_command")
+    pdf_processing_subparsers = _command_subparsers(pdf_processing_parser, "pdf_processing_command")
 
-    run_parser = pdf_processing_subparsers.add_parser(
+    run_parser = _add_parser(
+        pdf_processing_subparsers,
         "run",
         help="Convierte PDF con Docling, procesa batches con LLM y genera paper.final.json",
     )
@@ -517,7 +580,8 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     )
     run_parser.set_defaults(handler=cmd_pdf_processing_run)
 
-    markdown_parser = pdf_processing_subparsers.add_parser(
+    markdown_parser = _add_parser(
+        pdf_processing_subparsers,
         "markdown",
         help="Convierte los PDFs activos a paper.md usando solo Docling",
         description=(
@@ -573,12 +637,14 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
 
 def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     defaults = load_pdf_processing_config()
-    evidence_parser = subparsers.add_parser(
+    evidence_parser = _add_parser(
+        subparsers,
         "evidence-extraction",
-        help="Genera trimmed.json, experiment_map.json y canonical_evidence.json desde paper.processed.json",
+        help="Genera Canonical Evidence a partir de JSON estructurado.",
     )
-    evidence_subparsers = evidence_parser.add_subparsers(dest="evidence_extraction_command")
-    run_parser = evidence_subparsers.add_parser(
+    evidence_subparsers = _command_subparsers(evidence_parser, "evidence_extraction_command")
+    run_parser = _add_parser(
+        evidence_subparsers,
         "run",
         help="Genera artifacts de evidencia desde paper.processed.json",
     )
@@ -618,7 +684,8 @@ def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argpar
 
 def _add_testing_pipeline_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     defaults = load_pdf_processing_config()
-    testing_parser = subparsers.add_parser(
+    testing_parser = _add_parser(
+        subparsers,
         "testing-pipeline",
         help="Ejecuta PDF-processing completo en data/testing/<paper_id>",
         description=(
@@ -626,8 +693,9 @@ def _add_testing_pipeline_group(subparsers: argparse._SubParsersAction[argparse.
             "crea paper.md con Docling, estructura con LLM y genera evidence."
         ),
     )
-    testing_subparsers = testing_parser.add_subparsers(dest="testing_pipeline_command")
-    run_parser = testing_subparsers.add_parser(
+    testing_subparsers = _command_subparsers(testing_parser, "testing_pipeline_command")
+    run_parser = _add_parser(
+        testing_subparsers,
         "run",
         help="Ejecuta el pipeline completo en data/testing/<paper_id>",
     )
@@ -700,13 +768,15 @@ def _add_testing_pipeline_group(subparsers: argparse._SubParsersAction[argparse.
 
 
 def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    data_layout_parser = subparsers.add_parser(
+    data_layout_parser = _add_parser(
+        subparsers,
         "data-layout",
         help="Bootstrap explícito del layout canonico de data/",
     )
-    data_layout_subparsers = data_layout_parser.add_subparsers(dest="data_layout_command")
+    data_layout_subparsers = _command_subparsers(data_layout_parser, "data_layout_command")
 
-    data_layout_create_parser = data_layout_subparsers.add_parser(
+    data_layout_create_parser = _add_parser(
+        data_layout_subparsers,
         "create",
         help="Crea de forma explícita la estructura canonica de directorios bajo data/",
         description="Crea de forma explícita la estructura canonica de directorios bajo data/",
@@ -719,7 +789,8 @@ def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.Argum
     data_layout_create_parser.set_defaults(handler=cmd_data_layout_create)
 
 def _add_bridge_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    bridge_parser = subparsers.add_parser(
+    bridge_parser = _add_parser(
+        subparsers,
         "bridge",
         help="Comunicacion con registry, storage y eventos Victus",
         description=(
@@ -741,8 +812,11 @@ def _add_bridge_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=CLI_DESCRIPTION)
-    subparsers = parser.add_subparsers(dest="command")
+    parser = argparse.ArgumentParser(
+        description=CLI_DESCRIPTION,
+        formatter_class=_help_formatter,
+    )
+    subparsers = _command_subparsers(parser, "command")
 
     _add_metadata_extraction_group(subparsers)
     _add_metadata_to_pdf_group(subparsers)

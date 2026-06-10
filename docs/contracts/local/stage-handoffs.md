@@ -107,9 +107,10 @@ data/inputs/seeds/*.jsonl or --doi
 - Final success requires a merged structured JSON file, processed-paper contract
   enforcement, trimmed block handoff, and a done status.
 - Final downstream localization is through block identifiers and block fields.
-- Final `paper.final.json` blocks must preserve the [Block](block.md)
-  contract and should be treated as a compatibility name until the evidence
-  artifact names are implemented.
+- Final `paper.final.json` blocks must preserve the
+  [StructuredBlock](../fundamental/scientific/structured-block.md) contract and
+  should be treated as a compatibility name until the evidence artifact names
+  are implemented.
 
 ### Paper Classification
 
@@ -188,11 +189,11 @@ data/inputs/seeds/*.jsonl or --doi
 
 ## 7. Related Documents
 
-- [Contracts](../300-CONTRACTS.md)
+- [Contracts](../../300-CONTRACTS.md)
 - [Data Layout](data-layout.md)
 - [Artifact Schemas](artifact-schemas.md)
-- [Block](block.md)
-- [Paper Classification](paper-classification.md)
-- [Experiment Map](experiment-map.md)
-- [Canonical Evidence](canonical-evidence.md)
-- [PDF processing operations](../operations/pdf-processing.md)
+- [StructuredBlock](../fundamental/scientific/structured-block.md)
+- [Paper Classification](../fundamental/scientific/paper-classification.md)
+- [Experiment Map](../fundamental/scientific/experiment-map.md)
+- [Canonical Evidence](../fundamental/scientific/canonical-evidence.md)
+- [PDF processing operations](../../operations/pdf-processing.md)

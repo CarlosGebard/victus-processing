@@ -132,7 +132,7 @@ legacy consumers, but it is not a downstream localization contract.
 
 Processed and final `blocks` are normalized by the processed-paper contract.
 Block field semantics, identity guarantees, and required fields live in
-[Block](block.md).
+[StructuredBlock](../fundamental/scientific/structured-block.md).
 
 Prompt-defined `section_type` values must be in this canonical set:
 
@@ -302,7 +302,8 @@ Prompt producers and Pydantic models for canonical prompt output must not requir
 that field.
 
 The canonical evidence object schema, field semantics, allowed values, and
-validation rules live in [Canonical Evidence](canonical-evidence.md).
+validation rules live in
+[Canonical Evidence](../fundamental/scientific/canonical-evidence.md).
 
 ## 9. Registry Records
 
@@ -331,10 +332,10 @@ DOI and document ID.
 
 ## 11. Related Documents
 
-- [Contracts](../300-CONTRACTS.md)
+- [Contracts](../../300-CONTRACTS.md)
 - [Data Layout](data-layout.md)
 - [Stage Handoffs](stage-handoffs.md)
-- [Block](block.md)
-- [Paper Classification](paper-classification.md)
-- [Experiment Map](experiment-map.md)
-- [Canonical Evidence](canonical-evidence.md)
+- [StructuredBlock](../fundamental/scientific/structured-block.md)
+- [Paper Classification](../fundamental/scientific/paper-classification.md)
+- [Experiment Map](../fundamental/scientific/experiment-map.md)
+- [Canonical Evidence](../fundamental/scientific/canonical-evidence.md)

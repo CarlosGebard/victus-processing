@@ -203,15 +203,15 @@ def mirror_artifact_paths_for_base_name(base_name: str) -> dict[str, Path] | Non
     paper_id = paper_id_for_base_name(base_name)
     if not paper_id:
         return None
-    paper_dir = ctx.DATA_PAPERS_DIR / paper_id
+    data_root = ctx.VICTUS_DATA_STORAGE_ROOT
     return {
-        "metadata": paper_dir / "metadata" / "source.json",
-        "pdf": paper_dir / "raw" / "source.pdf",
-        "docling_heuristics_dir": paper_dir / "docling",
-        "docling_json": paper_dir / "docling" / "full.json",
-        "filtered_json": paper_dir / "docling" / "filtered.json",
-        "final_json": paper_dir / "docling" / "final.json",
-        "evidence": paper_dir / "evidence" / "canonical_evidence.json",
+        "metadata": data_root / "papers" / paper_id / "metadata.json",
+        "pdf": data_root / "papers" / paper_id / "original.pdf",
+        "docling_heuristics_dir": data_root / "structured-blocks" / paper_id,
+        "docling_json": data_root / "structured-blocks" / paper_id / "docling.json",
+        "filtered_json": data_root / "structured-blocks" / paper_id / "filtered.json",
+        "final_json": data_root / "structured-blocks" / paper_id / "blocks.json",
+        "evidence": data_root / "canonical-evidence" / paper_id / "canonical_evidence.json",
     }
 
 

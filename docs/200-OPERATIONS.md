@@ -79,6 +79,9 @@ More CLI detail: [CLI operations](operations/cli.md).
 
 PDF-processing detail: [PDF processing operations](operations/pdf-processing.md).
 
+Pipeline action observability plan:
+[Pipeline action observability](operations/runbooks/pipeline-action-observability-plan.md).
+
 ## 4. Configuration
 
 Runtime defaults live in `config/*.yaml`. Relative paths resolve from the
@@ -180,6 +183,9 @@ Operations does not cover:
 - [Architecture](100-ARCHITECTURE.md)
 - [Contracts](300-CONTRACTS.md)
 - [CLI operations](operations/cli.md)
+- [Contract synchronization](operations/contracts-sync.md)
 - [PDF processing operations](operations/pdf-processing.md)
 - [Pipeline runbooks](operations/pipelines/)
 - [Runbooks](operations/runbooks/)
+- [PostgreSQL pipeline records](operations/runbooks/postgres-pipeline-records.md)
+- [Data layout migration](operations/runbooks/data-layout-migration.md)

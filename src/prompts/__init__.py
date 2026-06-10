@@ -12,14 +12,11 @@ def _read_prompt(filename: str) -> str:
 
 
 PAPER_SELECTOR_SYSTEM_PROMPT = _read_prompt("metadata_extraction/paper_selector.md")
-PAPER_SELECTOR_GAP_SYSTEM_PROMPT = _read_prompt("metadata_extraction/paper_selector_dataset_gaps.md")
 
 
 def get_paper_selector_prompt(selection_profile: str = "broad-nutrition") -> str:
     if selection_profile in {"broad-nutrition", "nutrition-rag"}:
         return PAPER_SELECTOR_SYSTEM_PROMPT
-    if selection_profile == "dataset-gaps":
-        return PAPER_SELECTOR_GAP_SYSTEM_PROMPT
     raise ValueError(f"Unknown paper selector profile: {selection_profile}")
 
 
@@ -37,11 +34,10 @@ def build_paper_selector_user_prompt(candidates: list["PaperCandidate"]) -> str:
         "Candidate papers:\n\n"
         + "\n\n".join(candidate_blocks)
         + "\n\nReturn JSON with this shape:\n"
-        + '{"decisions":[{"id":"...","decision":"keep|drop|uncertain","reason":"..."}]}'
+        + '{"decisions":[{"id":"...","decision":"keep|drop|uncertain"}]}'
     )
 
 __all__ = [
-    "PAPER_SELECTOR_GAP_SYSTEM_PROMPT",
     "PAPER_SELECTOR_SYSTEM_PROMPT",
     "build_paper_selector_user_prompt",
     "get_paper_selector_prompt",

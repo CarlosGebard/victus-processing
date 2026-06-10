@@ -65,9 +65,8 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                             "type": "string",
                             "enum": ["keep", "drop", "uncertain"],
                         },
-                        "reason": {"type": "string"},
                     },
-                    "required": ["id", "decision", "reason"],
+                    "required": ["id", "decision"],
                     "additionalProperties": False,
                 },
             }
@@ -207,11 +206,7 @@ def classify_papers_with_llm(
     prompt_label: str = "production",
     dotenv_path: str | Path = DEFAULT_DOTENV_PATH,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
-    prompt_name = (
-        "metadata_extraction/paper_selector_dataset_gaps"
-        if selection_profile == "dataset-gaps"
-        else "metadata_extraction/paper_selector"
-    )
+    prompt_name = "metadata_extraction/paper_selector"
     prompt_spec: PromptSpec | None = None
     system_prompt = get_paper_selector_prompt(selection_profile)
     if prompt_registry is not None:

@@ -75,6 +75,6 @@ boundaries.
 
 ## 6. Related Documents
 
-- [Data Layout](../contracts/data-layout.md)
-- [Stage Handoffs](../contracts/stage-handoffs.md)
+- [Data Layout](../contracts/local/data-layout.md)
+- [Stage Handoffs](../contracts/local/stage-handoffs.md)
 - [PDF Processing Operations](../operations/pdf-processing.md)

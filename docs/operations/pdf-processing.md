@@ -113,7 +113,7 @@ Prompt and batch-continuity behavior:
 Final block behavior:
 
 - `paper.final.json` blocks preserve the
-  [Block Contract](../contracts/block.md).
+  [StructuredBlock Contract](../contracts/fundamental/scientific/structured-block.md).
 - Evidence trimming keeps only methods, results, discussion, and conclusion.
 - The evidence-stage handoff contains only `metadata-extraction` and `blocks`.
 - Blocks are the unit of downstream information and localization.
@@ -141,6 +141,6 @@ Testing notes:
 - successful partial outputs are preserved by paper directory.
 
 Related: [Operations](../200-OPERATIONS.md),
-[Data Layout Contract](../contracts/data-layout.md),
+[Data Layout Contract](../contracts/local/data-layout.md),
 [Evidence extraction](pipelines/evidence-extraction.md),
 [Testing pipeline](pipelines/testing-pipeline.md).

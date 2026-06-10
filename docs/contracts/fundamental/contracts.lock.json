@@ -1,0 +1,76 @@
+{
+  "synced_at": "2026-06-10T14:43:10+00:00",
+  "source_commit": "740b79659f7a625d5761723effff35e7e6e08e13",
+  "contracts": [
+    {
+      "contract_id": "victus.scientific.paper",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/paper.md",
+      "destination_path": "docs/contracts/fundamental/scientific/paper.md",
+      "checksum": "sha256:93d51389a2d8c8b8d5cf07aba794c009a70b452f2f0942594608ff40480febb5"
+    },
+    {
+      "contract_id": "victus.scientific.structured_block",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/structured-block.md",
+      "destination_path": "docs/contracts/fundamental/scientific/structured-block.md",
+      "checksum": "sha256:d694041f8a267e5802b3fab8716c522ebfbba2d60d0cb5b509ff8e98dff9c5ae"
+    },
+    {
+      "contract_id": "victus.scientific.paper_classification",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/paper-classification.md",
+      "destination_path": "docs/contracts/fundamental/scientific/paper-classification.md",
+      "checksum": "sha256:98ff44d1e257db943aad1efcfe3311c96ad14150258d42558ea3259943eab9d8"
+    },
+    {
+      "contract_id": "victus.scientific.experiment_map",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/experiment-map.md",
+      "destination_path": "docs/contracts/fundamental/scientific/experiment-map.md",
+      "checksum": "sha256:0dbbf9e321f70790cf85033fe81f506723564210225c7ccf365d67c9aaffa1d5"
+    },
+    {
+      "contract_id": "victus.scientific.canonical_evidence",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/canonical-evidence.md",
+      "destination_path": "docs/contracts/fundamental/scientific/canonical-evidence.md",
+      "checksum": "sha256:af86e77d6845768f38b0514e325d1078b43f2f24625c03e5862848b299d4c29b"
+    },
+    {
+      "contract_id": "victus.orchestration.pipeline_run",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/pipeline-run.md",
+      "destination_path": "docs/contracts/fundamental/scientific/pipeline-run.md",
+      "checksum": "sha256:1042293d0c7099898a8319eacc2ea2e6a74882ef2b01585a7b100253ff0e1971"
+    },
+    {
+      "contract_id": "victus.orchestration.pipeline_event",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/pipeline-event.md",
+      "destination_path": "docs/contracts/fundamental/scientific/pipeline-event.md",
+      "checksum": "sha256:e9bb19ba532b093608155ae4ea5d4352b9cca687a206b7be72c9e891009c688a"
+    },
+    {
+      "contract_id": "victus.storage.layout",
+      "version": "v1",
+      "source_path": "docs/contracts/processing/README.md",
+      "destination_path": "docs/contracts/fundamental/processing/README.md",
+      "checksum": "sha256:2f50592f510dd693c35d090a08620840308730b2bb7e8cd536bb925e12fad0bc"
+    },
+    {
+      "contract_id": "victus.storage.artifact_manifest",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/artifact-manifest.md",
+      "destination_path": "docs/contracts/fundamental/scientific/artifact-manifest.md",
+      "checksum": "sha256:79199c3ab58c7a18c4d6c0f497ceae8638ffc22aaea56f86e41e2e0aef960e7d"
+    },
+    {
+      "contract_id": "victus.process.paper_classification",
+      "version": "v1",
+      "source_path": "docs/contracts/scientific/paper-classification.md",
+      "destination_path": "docs/contracts/fundamental/scientific/paper-classification.md",
+      "checksum": "sha256:98ff44d1e257db943aad1efcfe3311c96ad14150258d42558ea3259943eab9d8"
+    }
+  ]
+}

@@ -22,6 +22,7 @@ dependencies = [
 victus-processing = "src.cli:main"
 victus-bridge = "ops.scripts.bridge.victus_ingest_bridge.cli:main"
 victus-infisical-env = "ops.scripts.infisical_env:main"
+contracts = "ops.scripts.contracts:main"
 
 [dependency-groups]
 dev = [

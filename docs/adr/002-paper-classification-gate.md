@@ -80,6 +80,6 @@ input and evidence-trimmed input.
 
 ## 6. Related Documents
 
-- [Paper Classification](../contracts/paper-classification.md)
-- [Stage Handoffs](../contracts/stage-handoffs.md)
-- [Artifact Schemas](../contracts/artifact-schemas.md)
+- [Paper Classification](../contracts/fundamental/scientific/paper-classification.md)
+- [Stage Handoffs](../contracts/local/stage-handoffs.md)
+- [Artifact Schemas](../contracts/local/artifact-schemas.md)

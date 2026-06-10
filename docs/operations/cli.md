@@ -98,4 +98,4 @@ uv run pytest tests/test_cli_smoke.py -q
 ```
 
 Related: [Operations](../200-OPERATIONS.md),
-[Configuration and CLI Contract](../contracts/configuration-and-cli.md).
+[Configuration and CLI Contract](../contracts/local/configuration-and-cli.md).

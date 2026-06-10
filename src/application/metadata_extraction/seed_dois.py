@@ -97,7 +97,7 @@ def collect_candidate_rows(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
-    for metadata_file in sorted(metadata_dir.glob("*.json")):
+    for metadata_file in sorted(metadata_dir.rglob("*.json")):
         try:
             payload = json.loads(metadata_file.read_text(encoding="utf-8"))
         except Exception:
