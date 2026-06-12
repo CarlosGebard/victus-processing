@@ -102,7 +102,7 @@ def save_registry(records: dict[str, dict[str, Any]]) -> None:
 def artifact_paths_for_base_name(base_name: str) -> dict[str, Path]:
     bundle_dir = ctx.DOCLING_HEURISTICS_DIR / base_name
     return {
-        "metadata": ctx.METADATA_DIR / f"{base_name}.metadata.json",
+        "metadata": ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
         "pdf": ctx.DOCLING_INPUT_DIR / f"{base_name}.pdf",
         "docling_heuristics_dir": bundle_dir,
         "docling_json": bundle_dir / f"{base_name}.json",
@@ -118,18 +118,27 @@ def _metadata_section(payload: Any) -> dict[str, Any] | None:
     section = payload.get("metadata")
     if isinstance(section, dict):
         return section
+    source_metadata = payload.get("source_metadata")
+    if isinstance(source_metadata, dict):
+        return {
+            "document_id": source_metadata.get("source_paper_id"),
+            "doi": source_metadata.get("doi"),
+        }
     return payload
 
 
-def _iter_metadata_entries(metadata_dir: Path | None = None) -> list[dict[str, str]]:
-    resolved_dir = metadata_dir or ctx.METADATA_DIR
+def _iter_metadata_entries(metadata_file: Path | None = None) -> list[dict[str, str]]:
+    resolved_file = metadata_file or (ctx.DATA_LAKE_DIR / "paper_metadata.jsonl")
     entries: list[dict[str, str]] = []
-    if not resolved_dir.exists():
+    if not resolved_file.exists():
         return entries
 
-    for metadata_file in sorted(resolved_dir.glob("*.json")):
+    for raw_line in resolved_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
         try:
-            payload = json.loads(metadata_file.read_text(encoding="utf-8"))
+            payload = json.loads(line)
         except Exception:
             continue
 
@@ -150,35 +159,25 @@ def _iter_metadata_entries(metadata_dir: Path | None = None) -> list[dict[str, s
                 "doi_slug": slugify_doi(normalized_doi),
                 "base_name": build_base_name(normalized_doi),
                 "legacy_base_name": build_legacy_base_name(str(document_id), normalized_doi) if document_id else "",
-                "path": str(metadata_file),
+                "path": str(resolved_file),
             }
         )
 
     return entries
 
 
-def metadata_path_for_base_name(base_name: str, metadata_dir: Path | None = None) -> Path | None:
-    resolved_dir = metadata_dir or ctx.METADATA_DIR
-    direct_path = resolved_dir / f"{base_name}.metadata.json"
-    if direct_path.exists():
-        return direct_path
-
+def metadata_path_for_base_name(base_name: str, metadata_file: Path | None = None) -> Path | None:
     parsed = parse_base_name(base_name)
     doi_slug = parsed["doi_slug"] if parsed else None
     document_id = parsed.get("document_id", "") if parsed else ""
 
-    for entry in _iter_metadata_entries(resolved_dir):
+    for entry in _iter_metadata_entries(metadata_file):
         if entry["base_name"] == base_name:
             return Path(entry["path"])
         if doi_slug and entry["doi_slug"] == doi_slug:
             return Path(entry["path"])
         if document_id and entry["document_id"] == document_id:
             return Path(entry["path"])
-
-    if document_id:
-        legacy_path = resolved_dir / f"{document_id}.json"
-        if legacy_path.exists():
-            return legacy_path
 
     return None
 
@@ -223,7 +222,7 @@ def metadata_exists_for_base_name(base_name: str) -> bool:
 
 
 def artifact_stage_status(paths: dict[str, Path]) -> dict[str, bool]:
-    base_name = paths["metadata"].stem.replace(".metadata", "")
+    base_name = paths["pdf"].stem
     mirror_paths = mirror_artifact_paths_for_base_name(base_name)
     if mirror_paths:
         paths = mirror_paths

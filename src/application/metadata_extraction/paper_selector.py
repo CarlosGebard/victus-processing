@@ -65,8 +65,9 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                             "type": "string",
                             "enum": ["keep", "drop", "uncertain"],
                         },
+                        "reason": {"type": "string"},
                     },
-                    "required": ["id", "decision"],
+                    "required": ["id", "decision", "reason"],
                     "additionalProperties": False,
                 },
             }
@@ -86,6 +87,20 @@ class PaperCandidate:
 
 def build_user_prompt(candidates: list[PaperCandidate]) -> str:
     return build_paper_selector_user_prompt(candidates)
+
+
+def build_selection_messages(prompt: str, candidates: list[PaperCandidate]) -> list[dict[str, str]]:
+    payload = {
+        "candidates": [
+            {
+                "id": candidate.id,
+                "title": candidate.title,
+            }
+            for candidate in candidates
+        ]
+    }
+    content = prompt + "\n\n# INPUT\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+    return [{"role": "user", "content": content}]
 
 
 def build_responses_payload(
@@ -219,10 +234,7 @@ def classify_papers_with_llm(
         LLMRequest(
             operation="metadata_extraction.paper_selector",
             model=effective_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": build_user_prompt(candidates)},
-            ],
+            messages=build_selection_messages(system_prompt, candidates),
             temperature=effective_temperature,
             max_tokens=prompt_config.get("max_tokens"),
             response_format={

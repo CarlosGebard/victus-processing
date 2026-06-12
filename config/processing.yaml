@@ -1,5 +1,5 @@
 docling_ingestion:
-  input_dir: "data/runtime/02-pdfs/active"
+  input_dir: "data/artifacts/pdfs"
   output_dir: "data/runtime/03-pdf_processing"
 
 heuristics:

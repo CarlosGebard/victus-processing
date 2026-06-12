@@ -53,21 +53,6 @@ def build_plan(root: Path) -> MigrationPlan:
         "active_pdf",
     )
     _plan_markdown(copies, conflicts, root)
-    _plan_exact_file(
-        copies,
-        conflicts,
-        root / "data/registry/papers.jsonl",
-        root / "data/lake/papers.jsonl",
-        "papers_jsonl",
-    )
-    _plan_exact_file(
-        copies,
-        conflicts,
-        root / "data/runtime/01-candidates/reviewed.jsonl",
-        root / "data/lake/paper_review_decisions.jsonl",
-        "paper_review_decisions",
-    )
-
     _scan_unresolved(unresolved, root)
     return MigrationPlan(copies=tuple(copies), conflicts=tuple(conflicts), unresolved=tuple(unresolved))
 

@@ -41,7 +41,7 @@ This repository covers:
 - `victus-processing` CLI commands;
 - local `data/` runtime layout;
 - metadata discovery and candidate state;
-- PDF normalization into active processing inputs;
+- manual PDF intake into canonical artifacts;
 - Docling/LLM PDF-processing artifacts;
 - LLM evidence extraction outputs;
 - local contracts for artifacts, paths, and stage handoffs.
@@ -97,7 +97,6 @@ Planned documentation structure:
 - **Canonical Evidence:** normalized, traceable evidence record extracted from
   metadata, blocks, and an experiment map.
 - **Runtime layout:** local directory structure under `data/`.
-- **Bridge:** optional integration surface for Victus infrastructure.
 
 ## 6. Repository Structure
 

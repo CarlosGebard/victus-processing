@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-CONTRACTS
 title: Victus Processing Contracts
 status: source-of-truth
-updated_at: 2026-06-10
+updated_at: 2026-06-11
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -28,9 +28,8 @@ Contracts are split by source and responsibility:
 - `docs/contracts/fundamental/`: ecosystem-level contracts synchronized from
   `victus-docs`. These define shared Victus interfaces and preserve the central
   contract repository subdirectory layout.
-- `docs/contracts/local/`: repository-local contracts maintained here. These
-  define how `victus-processing` implements, stores, validates, and operates
-  around the shared interfaces.
+- `docs/contracts/local/`: legacy repository-local contracts that have not yet
+  been grouped by domain.
 
 ## Fundamental Contracts
 
@@ -49,11 +48,13 @@ Contracts are split by source and responsibility:
 
 - [Data Layout](contracts/local/data-layout.md): stable local artifact
   locations, identities, stage inputs, stage outputs, and failure expectations.
+- [Metadata Extraction](operations/pipeline/metadata-extraction.md): operation, LLM selection
+  contract, `paper_metadata.jsonl` schema, and dedupe rules.
 - [Configuration and CLI](contracts/local/configuration-and-cli.md): config
   loading, environment precedence, CLI command surface, and public command
   guarantees.
 - [Stage Handoffs](contracts/local/stage-handoffs.md): boundaries between
-  metadata, bibliography, PDF normalization, PDF processing, trimming,
+  metadata, bibliography export, manual PDF intake, PDF processing, trimming,
   experiment mapping, and canonical evidence extraction.
 - [Artifact Schemas](contracts/local/artifact-schemas.md): durable JSON/JSONL
   shapes consumed or produced by the current pipeline.

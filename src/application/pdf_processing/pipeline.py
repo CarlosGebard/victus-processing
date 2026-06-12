@@ -22,7 +22,7 @@ def load_pdf_processing_config() -> PdfProcessingConfig:
     cfg = ctx.CONFIG.get("pdf_processing") or {}
     return PdfProcessingConfig(
         model=str(cfg.get("model", "litellm_proxy/gemini-flash-lite")),
-        input_dir=ctx.resolve_project_path(cfg.get("input_dir"), ctx.DATA_RUNTIME_PDFS_ACTIVE_DIR),
+        input_dir=ctx.resolve_project_path(cfg.get("input_dir"), ctx.DATA_ARTIFACTS_PDFS_DIR),
         output_dir=ctx.resolve_project_path(cfg.get("output_dir"), ctx.DATA_RUNTIME_PDF_PROCESSING_DIR),
         workers=int(cfg.get("workers", 1)),
         prompt_first_batch=ctx.resolve_project_path(

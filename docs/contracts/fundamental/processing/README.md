@@ -50,10 +50,8 @@ data/
       candidates_seed_dois.jsonl
 
   lake/
-    papers.jsonl
     paper_candidates.jsonl
-    paper_review_decisions.jsonl
-    pdf_relations.jsonl
+    paper_pdf_links.jsonl
 
     structured_blocks.jsonl
     paper_classifications.jsonl
@@ -65,6 +63,8 @@ data/
     pipeline_events.jsonl
 
   artifacts/
+    intake/
+      pdfs/
     pdfs/
       {paper_id}.pdf
     markdown/

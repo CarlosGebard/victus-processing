@@ -5,7 +5,8 @@ status: source-of-truth
 updated_at: 2026-06-10
 related_components:
   - src.application.metadata_extraction
-  - src.application.metadata_to_pdf
+  - src.application.bibliography_export
+  - src.application.pdf_intake
   - src.application.pdf_processing
   - src.application.evidence_extraction
   - src.application.testing_pipeline
@@ -35,10 +36,8 @@ payloads so the same model can later be mirrored into PostgreSQL.
 
 | Artifact | Purpose |
 | --- | --- |
-| `data/lake/papers.jsonl` | Canonical paper records. |
 | `data/lake/paper_candidates.jsonl` | Candidate paper metadata before acceptance. |
-| `data/lake/paper_review_decisions.jsonl` | Accepted/rejected review decisions. |
-| `data/lake/pdf_relations.jsonl` | DOI/PDF relation records used by PDF normalization. |
+| `data/lake/paper_pdf_links.jsonl` | Manual and backfilled metadata-to-PDF link records: `metadata_id`, `paper_id`, `doi`, `source_pdf_path`, `artifact_pdf_path`, `linked_at`, and `link_method`. |
 | `data/lake/structured_blocks.jsonl` | StructuredBlock records promoted from PDF processing. |
 | `data/lake/paper_classifications.jsonl` | PaperClassification records. |
 | `data/lake/experiment_maps.jsonl` | ExperimentMap records. |

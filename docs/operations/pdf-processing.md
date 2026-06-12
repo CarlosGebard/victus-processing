@@ -11,7 +11,8 @@ tags:
 
 # PDF Processing Operations
 
-PDF processing converts active PDFs into Markdown and structured block JSON.
+PDF processing converts canonical PDF artifacts into Markdown and structured
+block JSON.
 Evidence extraction and testing are separate public pipeline interfaces.
 
 Runtime sequence:
@@ -21,7 +22,7 @@ PDF -> Docling Markdown -> Markdown batches -> LLM JSON -> merged block JSON
   -> processed-paper contract enforcement -> paper.processed.json
 ```
 
-Run all active PDFs:
+Run all available PDF artifacts:
 
 ```bash
 uv run victus-processing pdf-processing run
@@ -53,7 +54,7 @@ Next stages:
 
 Operational inputs:
 
-- active PDFs under `data/runtime/02-pdfs/active/`;
+- PDF artifacts under `data/artifacts/pdfs/`;
 - prompts under `src/prompts/`;
 - runtime defaults in `config/pdf_processing.yaml`;
 - LiteLLM provider credentials and routing configuration.

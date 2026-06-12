@@ -1,6 +1,6 @@
 pdf_processing:
   model: "litellm_proxy/gemini-flash-lite"
-  input_dir: "data/runtime/02-pdfs/active"
+  input_dir: "data/artifacts/pdfs"
   output_dir: "data/runtime/03-pdf_processing"
   workers: 1
   prompt_first_batch: "src/prompts/pdf_processing/markdown_first_batch.md"

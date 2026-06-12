@@ -89,5 +89,3 @@ Packages UI after consumers are moved back to a known-good tag.
   secret manager.
 - The image defaults to `victus-processing --help`; pass CLI arguments after the
   image name.
-- The package currently installs all project console scripts, but the default
-  command avoids optional bridge commands unless explicitly invoked.

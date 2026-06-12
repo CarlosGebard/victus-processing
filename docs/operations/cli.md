@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-CLI-OPERATIONS
 title: Victus Processing CLI Operations
 status: source-of-truth
-updated_at: 2026-06-06
+updated_at: 2026-06-11
 tags:
   - operations
   - cli
@@ -29,15 +29,16 @@ uv run victus-processing <group> <command> --help
 
 - `metadata-extraction`: discovers candidates, fetches metadata by DOI, and
   prepares DOI seed queues.
-- `metadata-to-pdf`: generates bibliography artifacts and normalizes raw PDFs
-  into active runtime inputs.
-- `pdf-processing`: converts active PDFs to Markdown and structured paper JSON.
+- `bibliography-export`: generates DOI-only BibTeX from canonical metadata for
+  external tools such as Zotero.
+- `pdf-intake`: links manually obtained PDFs to metadata and stores canonical
+  PDF artifacts. It can also backfill `paper_pdf_links.jsonl` from existing
+  artifact PDFs and legacy DOI links.
+- `pdf-processing`: converts PDF artifacts to Markdown and structured paper JSON.
 - `evidence-extraction`: classifies processed papers, maps experiments, builds
   packets, and writes canonical evidence.
 - `testing-pipeline`: runs the PDF-processing and evidence chain in per-paper
   review folders under `data/testing`.
-- `bridge`: optional Victus infrastructure integration. This group may be
-  unavailable in local checkouts that do not include `ops/scripts/bridge`.
 - `data-layout`: creates local runtime directories.
 
 ## Common Flow
@@ -52,9 +53,16 @@ Run the main local paper-processing flow:
 
 ```bash
 uv run victus-processing metadata-extraction explore --mode broad-nutrition
-uv run victus-processing metadata-to-pdf normalize-pdfs
+uv run victus-processing bibliography-export generate-bib
+uv run victus-processing pdf-intake link --metadata-id meta:s2:example --pdf data/artifacts/intake/pdfs/example.pdf
 uv run victus-processing pdf-processing run
 uv run victus-processing evidence-extraction run
+```
+
+Backfill links for existing PDF artifacts:
+
+```bash
+uv run victus-processing pdf-intake backfill-links --overwrite
 ```
 
 Use `--limit` while testing or debugging:
@@ -68,11 +76,12 @@ uv run victus-processing testing-pipeline run --limit 1
 
 ## Pipeline Runbooks
 
-- [Metadata extraction](pipelines/metadata-extraction.md)
-- [Metadata to PDF](pipelines/metadata-to-pdf.md)
-- [PDF processing](pipelines/pdf-processing.md)
-- [Evidence extraction](pipelines/evidence-extraction.md)
-- [Testing pipeline](pipelines/testing-pipeline.md)
+- [Metadata extraction](pipeline/metadata-extraction.md)
+- [Bibliography export](pipeline/bibliography-export.md)
+- [PDF intake](pipeline/pdf-intake.md)
+- [PDF processing](pipeline/pdf-processing.md)
+- [Evidence extraction](pipeline/evidence-extraction.md)
+- [Testing pipeline](pipeline/testing-pipeline.md)
 
 ## Infisical Helper
 

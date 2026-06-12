@@ -2,8 +2,10 @@
 id: VICTUS-PROCESSING-ARTIFACT-SCHEMAS-CONTRACT
 title: Victus Processing Artifact Schemas Contract
 status: source-of-truth
-updated_at: 2026-06-06
+updated_at: 2026-06-11
 related_components:
+  - src.application.bibliography_export
+  - src.application.pdf_intake
   - src.application.pdf_processing.models
   - src.application.pdf_processing.pipeline
   - src.application.pdf_processing.processed_paper_contract
@@ -29,6 +31,7 @@ or consumed by the pipeline.
 Covered:
 
 - metadata candidate files;
+- manual PDF intake link records;
 - PDF-processing raw batch files;
 - PDF-processing final structured paper files;
 - status JSONL files;
@@ -41,7 +44,60 @@ Not covered:
 - downstream analytics schemas;
 - prompt text content.
 
-## 3. PDF-Processing Batch Output
+## 3. Paper PDF Link Records
+
+The canonical manual PDF intake link dataset is:
+
+```text
+data/lake/paper_pdf_links.jsonl
+```
+
+Each JSONL line uses the minimal link shape:
+
+```text
+metadata_id: string
+paper_id: string
+doi: string | null
+source_pdf_path: string
+artifact_pdf_path: string
+linked_at: string
+link_method: "manual_intake"
+```
+
+Field rules:
+
+- `metadata_id` must exist in `data/lake/paper_metadata.jsonl`.
+- `paper_id` identifies the canonical PDF artifact. New manual intake derives
+  it from `metadata_id`; backfilled records preserve the existing artifact
+  filename stem.
+- `doi` is copied from the metadata record when available and normalized.
+- `source_pdf_path` is the original manual intake PDF path when available.
+  Backfilled records may use the artifact path when no earlier source path is
+  observable.
+- `artifact_pdf_path` is the promoted PDF artifact path under
+  `data/artifacts/pdfs/`.
+- `linked_at` is an ISO-8601 UTC timestamp.
+- `link_method` must be `manual_intake`.
+
+Validation rules:
+
+- `metadata_id`, `paper_id`, `source_pdf_path`, `artifact_pdf_path`,
+  `linked_at`, and `link_method` are required.
+- `doi` may be null only when metadata has no DOI.
+- `artifact_pdf_path` must point under `data/artifacts/pdfs/`.
+- `link_method` must equal `manual_intake`.
+- Records are append-oriented. Corrections should be made by regenerating or
+  appending corrected links, not by changing PDF-processing outputs.
+
+Forbidden fields in this canonical link record:
+
+- external provider response payloads;
+- citation counts;
+- title matching scores or heuristics;
+- run/event state;
+- PDF processing or evidence extraction outputs.
+
+## 4. PDF-Processing Batch Output
 
 Each LLM batch result must validate against the current prompt schema.
 
@@ -109,7 +165,7 @@ technical state. They may be retained in raw batch artifacts for inspection and
 continuity, but they are obsolete after trimming and must not continue into
 experiment mapping or canonical evidence extraction.
 
-## 4. PDF-Processing Processed and Final Outputs
+## 5. PDF-Processing Processed and Final Outputs
 
 The normalized processed output is:
 
@@ -224,7 +280,7 @@ It removes top-level `sections`, `section_registry`,
 `processing`. It also removes block quality flags `is_truncated` and
 `is_duplicate` when present.
 
-## 5. Status JSONL
+## 6. Status JSONL
 
 PDF-processing status records are append-oriented JSONL. Current durable fields:
 

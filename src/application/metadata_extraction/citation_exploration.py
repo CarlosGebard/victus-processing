@@ -5,6 +5,7 @@ import random
 import threading
 import time
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -14,6 +15,7 @@ from requests import HTTPError
 from src.workspace.config import (
     EXPLORATION_COMPLETED_SEED_DOI_FILE,
     EXPLORATION_SEED_DOI_FILE,
+    DATA_LAKE_DIR,
     get_config,
     get_env_or_config,
     get_pipeline_paths,
@@ -55,8 +57,7 @@ selection_model = get_env_or_config(
 selection_preview_words = max(1, int(metadata_selection_cfg.get("abstract_preview_words", 20)))
 selection_batch_size = max(1, int(metadata_selection_cfg.get("batch_size", 20)))
 
-papers_dir = paths["metadata_dir"]
-discarded_dir = paths["discarded_dir"]
+paper_metadata_lake_file = DATA_LAKE_DIR / "paper_metadata.jsonl"
 
 session = requests.Session()
 if SEMANTIC_API_KEY:
@@ -76,47 +77,22 @@ def normalize_selection_mode(selection_mode: str) -> str:
     raise ValueError(f"Selection mode no soportado: {selection_mode}")
 
 
-def discarded_index_mode(selection_mode: str | None) -> str:
-    normalize_selection_mode(selection_mode or "broad-nutrition")
-    return "dataset_nutrition"
-
-
 def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _collect_processed_ids(directory: Path) -> set[str]:
+def _collect_lake_paper_metadata_ids(lake_file: Path | None = None) -> set[str]:
+    return _collect_lake_paper_metadata_ids_cached(str((lake_file or paper_metadata_lake_file).resolve()))
+
+
+@lru_cache(maxsize=1)
+def _collect_lake_paper_metadata_ids_cached(lake_file_path: str) -> set[str]:
     processed: set[str] = set()
-    for path in directory.rglob("*.json"):
-        processed.add(path.stem)
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        paper_id = str(payload.get("paperId") or "").strip()
-        doi = str(payload.get("doi") or "").strip()
-        if paper_id:
-            processed.add(paper_id)
-        if doi:
-            processed.add(build_base_name(doi))
-    return processed
-
-
-def discarded_index_path() -> Path:
-    return discarded_dir / "discarded.jsonl"
-
-
-def reviewed_index_path() -> Path:
-    return papers_dir.parent / "reviewed.jsonl"
-
-
-def _collect_discarded_index_ids(index_path: Path | None = None) -> set[str]:
-    index_path = index_path or discarded_index_path()
-    processed: set[str] = set()
-    if not index_path.exists():
+    lake_file = Path(lake_file_path)
+    if not lake_file.exists():
         return processed
 
-    for raw_line in index_path.read_text(encoding="utf-8").splitlines():
+    for raw_line in lake_file.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -126,17 +102,20 @@ def _collect_discarded_index_ids(index_path: Path | None = None) -> set[str]:
             continue
         if not isinstance(payload, dict):
             continue
-        doi = normalize_doi(str(payload.get("doi") or ""))
-        if doi:
-            processed.add(build_base_name(doi))
-        paper_id = str(payload.get("paperId") or "").strip()
+        source_metadata = payload.get("source_metadata")
+        if not isinstance(source_metadata, dict):
+            continue
+        paper_id = str(source_metadata.get("source_paper_id") or "").strip()
         if paper_id:
             processed.add(paper_id)
+        doi = normalize_doi(str(source_metadata.get("doi") or ""))
+        if doi:
+            processed.add(build_base_name(doi))
     return processed
 
 
 def collect_processed_papers() -> set[str]:
-    return _collect_processed_ids(papers_dir) | _collect_discarded_index_ids()
+    return _collect_lake_paper_metadata_ids()
 
 
 def _semantic_rate_limit() -> None:
@@ -182,53 +161,153 @@ def fetch_paper_by_doi(doi: str) -> dict[str, Any]:
     return payload
 
 
-def metadata_output_path(output_dir: Path, record: dict[str, Any], requested_doi: str) -> Path:
-    doi = str(record.get("doi") or "").strip() or normalize_doi(requested_doi)
-    paper_id = str(record.get("paperId") or "").strip()
-    stem = build_base_name(doi) if doi else paper_id
-    if not stem:
-        raise ValueError("No se pudo construir nombre de archivo para metadata.")
-    return output_dir / f"{stem}.metadata.json"
+def _as_int_or_none(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_str_or_none(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _authors(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    authors: list[str] = []
+    for item in value:
+        if isinstance(item, dict):
+            name = _as_str_or_none(item.get("name"))
+        else:
+            name = _as_str_or_none(item)
+        if name:
+            authors.append(name)
+    return authors
+
+
+def _metadata_id_for_record(record: dict[str, Any]) -> str | None:
+    paper_id = _as_str_or_none(record.get("paperId"))
+    if paper_id:
+        return f"meta:s2:{paper_id}"
+    doi = normalize_doi(str(record.get("doi") or ""))
+    if doi:
+        return f"meta:crossref:{doi}"
+    return None
+
+
+def normalize_candidate_record(record: dict[str, Any], *, decision: str) -> dict[str, Any] | None:
+    metadata_id = _metadata_id_for_record(record)
+    title = _as_str_or_none(record.get("title"))
+    if not metadata_id or not title:
+        return None
+
+    timestamp = utc_now_iso()
+    doi = normalize_doi(str(record.get("doi") or "")) or None
+    return {
+        "metadata_id": metadata_id,
+        "source_metadata": {
+            "source": "semantic_scholar",
+            "source_paper_id": _as_str_or_none(record.get("paperId")),
+            "doi": doi,
+            "arxiv": _as_str_or_none(record.get("arxiv")),
+            "title": title,
+            "year": _as_int_or_none(record.get("year")),
+            "citation_count": _as_int_or_none(record.get("citationCount")),
+            "pdf_url": _as_str_or_none(record.get("pdf_url")),
+            "authors": _authors(record.get("authors")),
+        },
+        "schema_version": "v1",
+        "discovery": {
+            "seed_papers": [normalize_doi(str(item)) for item in record.get("seed_papers", []) if normalize_doi(str(item))],
+            "is_seed_paper": bool(record.get("is_seed_paper")),
+        },
+        "domain_screening": {
+            "decision": decision,
+            "model": None,
+        },
+        "created_at": _as_str_or_none(record.get("created_at")) or timestamp,
+        "updated_at": timestamp,
+    }
+
+
+def _upsert_lake_metadata_record(
+    candidate: dict[str, Any],
+    *,
+    decision: str,
+    output_file: Path | None = None,
+    overwrite: bool = True,
+) -> tuple[Path, str, dict[str, Any]]:
+    output_file = output_file or paper_metadata_lake_file
+    metadata = normalize_candidate_record(candidate, decision=decision)
+    if metadata is None:
+        raise ValueError("No se pudo construir metadata lake record.")
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, Any]] = []
+    if output_file.exists():
+        for line in output_file.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rows.append(json.loads(line))
+
+    source_metadata = metadata["source_metadata"]
+    metadata_id = metadata["metadata_id"]
+    doi_key = source_metadata.get("doi")
+    existing_index = next(
+        (
+            index
+            for index, row in enumerate(rows)
+            if row.get("metadata_id") == metadata_id
+            or (
+                doi_key
+                and isinstance(row.get("source_metadata"), dict)
+                and row["source_metadata"].get("doi") == doi_key
+            )
+        ),
+        None,
+    )
+    if existing_index is not None and not overwrite:
+        return output_file, "skipped_existing", rows[existing_index]
+
+    if existing_index is None:
+        rows.append(metadata)
+    else:
+        existing = rows[existing_index]
+        metadata["created_at"] = existing.get("created_at") or metadata["created_at"]
+        rows[existing_index] = metadata
+
+    output_file.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8")
+    _collect_lake_paper_metadata_ids_cached.cache_clear()
+    return output_file, "written", metadata
 
 
 def write_metadata_for_doi(
     doi: str,
     *,
-    output_dir: Path,
+    output_dir: Path = paper_metadata_lake_file,
     overwrite: bool = False,
 ) -> tuple[Path, str]:
     normalized_doi = normalize_doi(doi)
     paper = fetch_paper_by_doi(normalized_doi)
-    metadata = paper_to_metadata_record(
+    candidate = paper_to_metadata_record(
         paper,
         parent=None,
         seed_doi=normalized_doi,
         is_seed_paper=True,
         abstract_word_limit=10**9,
     )
-    output_path = metadata_output_path(output_dir, metadata, normalized_doi)
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_path.exists() and not overwrite:
-        existing = json.loads(output_path.read_text(encoding="utf-8"))
-        review_record = _review_index_payload(
-            existing,
-            status="kept",
-            dataset=discarded_index_mode("broad-nutrition"),
-        )
-        if review_record is not None:
-            _write_reviewed_index_record(review_record, output_dir.parent / "reviewed.jsonl")
-        return output_path, "skipped_existing"
-
-    output_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    review_record = _review_index_payload(
-        metadata,
-        status="kept",
-        dataset=discarded_index_mode("broad-nutrition"),
+    output_path, status, _metadata = _upsert_lake_metadata_record(
+        candidate,
+        decision="keep",
+        output_file=output_dir,
+        overwrite=overwrite,
     )
-    if review_record is not None:
-        _write_reviewed_index_record(review_record, output_dir.parent / "reviewed.jsonl")
-    return output_path, "written"
+    return output_path, status
 
 
 def _load_doi_list(doi_file: Path) -> list[str]:
@@ -403,128 +482,6 @@ def _paper_file_stem(paper: dict[str, Any]) -> str:
     raise ValueError("Paper sin DOI ni paperId.")
 
 
-def _merge_metadata_record(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(existing)
-    for key in ("paperId", "title", "year", "citationCount", "doi", "arxiv", "pdf_url", "abstract"):
-        if incoming.get(key) not in (None, ""):
-            merged[key] = incoming.get(key)
-
-    merged["authors"] = sorted(
-        {
-            str(author).strip()
-            for author in [*(existing.get("authors") or []), *(incoming.get("authors") or [])]
-            if str(author).strip()
-        }
-    )
-    merged["parent_papers"] = sorted(
-        {
-            str(parent).strip()
-            for parent in [*(existing.get("parent_papers") or []), *(incoming.get("parent_papers") or [])]
-            if str(parent).strip()
-        }
-    )
-    merged["seed_papers"] = sorted(
-        {
-            normalize_doi(str(seed_doi))
-            for seed_doi in [*(existing.get("seed_papers") or []), *(incoming.get("seed_papers") or [])]
-            if str(seed_doi).strip()
-        }
-    )
-    merged["is_seed_paper"] = bool(existing.get("is_seed_paper")) or bool(incoming.get("is_seed_paper"))
-    merged["created_at"] = existing.get("created_at") or incoming.get("created_at") or utc_now_iso()
-    return merged
-
-
-def _discard_index_payload(
-    paper: dict[str, Any],
-    *,
-    selection: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    doi = normalize_doi(str((paper.get("externalIds") or {}).get("DOI") or ""))
-    if not doi:
-        raise ValueError("Paper descartado sin DOI; no se puede escribir discarded.jsonl.")
-    payload = {
-        "doi": doi,
-        "dataset": discarded_index_mode((selection or {}).get("mode")),
-        "created_at": utc_now_iso(),
-    }
-    paper_id = str(paper.get("paperId") or "").strip()
-    if paper_id:
-        payload["paperId"] = paper_id
-    return payload
-
-
-def _review_index_payload(record: dict[str, Any], *, status: str, dataset: str) -> dict[str, Any] | None:
-    doi = normalize_doi(str(record.get("doi") or ""))
-    if not doi:
-        return None
-    payload = {
-        "doi": doi,
-        "status": status,
-        "dataset": dataset,
-        "created_at": str(record.get("created_at") or utc_now_iso()),
-    }
-    paper_id = str(record.get("paperId") or "").strip()
-    if paper_id:
-        payload["paperId"] = paper_id
-    return payload
-
-
-def _load_discarded_index(index_path: Path | None = None) -> dict[str, dict[str, Any]]:
-    index_path = index_path or discarded_index_path()
-    records: dict[str, dict[str, Any]] = {}
-    if not index_path.exists():
-        return records
-    for raw_line in index_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        doi = normalize_doi(str(payload.get("doi") or ""))
-        if doi:
-            payload["doi"] = doi
-            records[doi] = payload
-    return records
-
-
-def _write_discarded_index_record(
-    record: dict[str, Any],
-    index_path: Path | None = None,
-) -> None:
-    index_path = index_path or discarded_index_path()
-    records = _load_discarded_index(index_path)
-    doi = normalize_doi(str(record.get("doi") or ""))
-    if not doi:
-        return
-    if doi in records and records[doi].get("created_at"):
-        record["created_at"] = records[doi]["created_at"]
-    records[doi] = record
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    with index_path.open("w", encoding="utf-8") as handle:
-        for item in sorted(records.values(), key=lambda value: str(value.get("doi") or "")):
-            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def _write_reviewed_index_record(record: dict[str, Any], index_path: Path | None = None) -> None:
-    index_path = index_path or reviewed_index_path()
-    records = _load_discarded_index(index_path)
-    doi = normalize_doi(str(record.get("doi") or ""))
-    if not doi:
-        return
-    if doi in records and records[doi].get("created_at"):
-        record["created_at"] = records[doi]["created_at"]
-    records[doi] = record
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    with index_path.open("w", encoding="utf-8") as handle:
-        for item in sorted(records.values(), key=lambda value: str(value.get("doi") or "")):
-            handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
-
-
 def _record_identifiers(record: dict[str, Any]) -> set[str]:
     identifiers: set[str] = set()
     paper_id = str(record.get("paperId") or "").strip()
@@ -575,31 +532,17 @@ def save_paper(
         selection_mode=selection_mode,
         processed_papers=processed_papers,
     )
-    file_stem = _paper_file_stem(paper)
-    file_path = papers_dir / f"{file_stem}.metadata.json"
-    file_path.parent.mkdir(parents=True, exist_ok=True)
     incoming = paper_to_metadata_record(
         paper,
         parent=parent,
         seed_doi=seed_doi,
         is_seed_paper=is_seed_paper,
     )
-
-    if file_path.exists():
-        existing = json.loads(file_path.read_text(encoding="utf-8"))
-        incoming = _merge_metadata_record(existing, incoming)
-
-    file_path.write_text(json.dumps(incoming, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    review_record = _review_index_payload(
-        incoming,
-        status="kept",
-        dataset=discarded_index_mode(selection_mode),
-    )
-    if review_record is not None:
-        _write_reviewed_index_record(review_record)
+    _path, _status, metadata = _upsert_lake_metadata_record(incoming, decision="keep")
 
     if processed_papers is not None:
         processed_papers.update(_record_identifiers(incoming))
+        processed_papers.add(str(metadata["metadata_id"]))
 
 
 def save_discarded(
@@ -618,26 +561,21 @@ def save_discarded(
         selection_mode=str((selection or {}).get("mode") or "broad-nutrition"),
         processed_papers=processed_papers,
     )
-    incoming = _discard_index_payload(paper, selection=selection)
-    _write_discarded_index_record(incoming)
-    review_record = _review_index_payload(
-        incoming,
-        status="discarded",
-        dataset=str(incoming.get("dataset") or "dataset_nutrition"),
-    )
-    if review_record is not None:
-        _write_reviewed_index_record(review_record)
+    candidate = paper_to_metadata_record(paper, parent=parent, seed_doi=seed_doi)
+    decision = str((selection or {}).get("decision") or "drop")
+    if decision not in {"keep", "drop", "uncertain"}:
+        decision = "drop"
+    _path, _status, metadata = _upsert_lake_metadata_record(candidate, decision=decision)
 
     if processed_papers is not None:
-        processed_papers.update(_record_identifiers(incoming))
+        processed_papers.update(_record_identifiers(candidate))
+        processed_papers.add(str(metadata["metadata_id"]))
 
 
 def _paper_storage_state(paper: dict[str, Any]) -> str | None:
     file_stem = _paper_file_stem(paper)
-    if (papers_dir / f"{file_stem}.metadata.json").exists():
+    if file_stem in _collect_lake_paper_metadata_ids():
         return "kept"
-    if file_stem in _collect_discarded_index_ids():
-        return "discarded"
     return None
 
 

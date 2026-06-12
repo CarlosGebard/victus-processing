@@ -7,9 +7,9 @@ from src.workspace import config as ctx
 from src.workspace.pipeline_context import PipelineRunContext
 from src.workspace.runs import config_hash, content_hash_file
 from src.workspace.data_layout import create_data_layout
-from src.application.metadata_to_pdf.json_to_bib import generate_bib_flow
+from src.application.bibliography_export import generate_bib_flow
 from src.application.metadata_extraction import seed_dois
-from src.application.metadata_to_pdf import normalize_from_relations
+from src.application.pdf_intake import backfill_links_from_existing_artifacts, link_manual_pdf
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
 from src.application.pdf_processing.pipeline import (
     load_pdf_processing_config,
@@ -110,12 +110,12 @@ def cmd_metadata_from_doi(args: argparse.Namespace) -> None:
 
 def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
     if args.mode == "broad-nutrition":
-        metadata_dir = ctx.METADATA_DIR.resolve()
+        metadata_file = (ctx.DATA_LAKE_DIR / "paper_metadata.jsonl").resolve()
         explored_dois_file = ctx.EXPLORATION_COMPLETED_SEED_DOI_FILE.resolve()
         terms_file = seed_dois.DEFAULT_TERMS_FILE.resolve()
         output_path = seed_dois.DEFAULT_OUTPUT_FILE.resolve()
-        if not metadata_dir.exists():
-            raise SystemExit(f"No existe metadata_dir: {metadata_dir}")
+        if not metadata_file.exists():
+            raise SystemExit(f"No existe metadata_file: {metadata_file}")
         if not terms_file.exists():
             raise SystemExit(f"No existe terms_file: {terms_file}")
         context = _start_seed_context(args, output_path)
@@ -132,7 +132,7 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
         keywords = seed_dois.load_keyword_dictionary(terms_file)
         explored_dois = seed_dois.load_explored_dois(explored_dois_file)
         rows = seed_dois.collect_candidate_rows(
-            metadata_dir,
+            metadata_file,
             explored_dois=explored_dois,
             keywords=keywords,
             min_citations=max(0, int(args.min_citations)),
@@ -172,7 +172,7 @@ def cmd_metadata_seed_dois(args: argparse.Namespace) -> None:
         context.finish(status="succeeded", summary={"written": written, "candidates_found": len(rows)})
 
         print("Metadata seed DOI candidates")
-        print(f"- metadata_dir:     {ctx.display_path(metadata_dir)}")
+        print(f"- metadata_file:    {ctx.display_path(metadata_file)}")
         print(f"- explored_dois:    {ctx.display_path(explored_dois_file)}")
         print(f"- terms_file:       {ctx.display_path(terms_file)}")
         print(f"- output:           {ctx.display_path(output_path)}")
@@ -217,30 +217,42 @@ def _start_seed_context(args: argparse.Namespace, output_path: Path) -> Pipeline
 def cmd_bib_generate(args: argparse.Namespace) -> None:
     generate_bib_flow(
         _optional_resolved(args.output),
-        _optional_resolved(args.input_csv),
+        _resolved(args.input_jsonl),
     )
 
 
-def cmd_pdfs_normalize(args: argparse.Namespace) -> None:
-    relations_csv = _resolved(args.relations_csv) if args.relations_csv else normalize_from_relations._default_relations_csv_from_metadata_dir(ctx.METADATA_DIR)
-    if relations_csv is None:
-        raise FileNotFoundError("No se encontro doi_pdf_relations*.csv en data/reports o metadata.")
-    raw_pdf_dir = _resolved(args.raw_dir) if args.raw_dir != ctx.RAW_PDF_DIR else ctx.resolve_available_raw_pdf_dir(ctx.RAW_PDF_DIR)
-
-    copied, skipped = normalize_from_relations.sync_raw_pdfs_from_relations(
-        raw_pdf_dir=raw_pdf_dir,
-        input_dir=_resolved(args.input_dir),
-        relations_csv=relations_csv,
-        unmatched_dir=_resolved(args.unmatched_dir),
+def cmd_pdf_intake_link(args: argparse.Namespace) -> None:
+    link = link_manual_pdf(
+        metadata_id=args.metadata_id,
+        source_pdf=_resolved(args.pdf),
+        metadata_file=_resolved(args.metadata_file),
+        artifact_dir=_resolved(args.artifact_dir),
+        links_file=_resolved(args.links_file),
+        move=not args.copy,
+        overwrite=args.overwrite,
     )
 
-    print("Sincronizacion raw_pdf -> normalized_pdfs via doi_pdf_relations.csv")
-    print(f"- relations_csv: {ctx.display_path(relations_csv)}")
-    if raw_pdf_dir != ctx.RAW_PDF_DIR:
-        print(f"- raw_pdf_dir fallback: {ctx.display_path(raw_pdf_dir)}")
-    print(f"- unmatched_pdf_dir: {ctx.display_path(_resolved(args.unmatched_dir))}")
-    print(f"- Copiados: {copied}")
-    print(f"- Omitidos: {skipped}")
+    print("PDF linkeado")
+    print(f"- metadata_id:       {link.metadata_id}")
+    print(f"- paper_id:          {link.paper_id}")
+    print(f"- doi:               {link.doi or ''}")
+    print(f"- source_pdf_path:   {link.source_pdf_path}")
+    print(f"- artifact_pdf_path: {link.artifact_pdf_path}")
+    print(f"- links_file:        {ctx.display_path(_resolved(args.links_file))}")
+
+
+def cmd_pdf_intake_backfill_links(args: argparse.Namespace) -> None:
+    written, skipped = backfill_links_from_existing_artifacts(
+        metadata_file=_resolved(args.metadata_file),
+        legacy_links_file=_resolved(args.legacy_links_file),
+        artifact_dir=_resolved(args.artifact_dir),
+        links_file=_resolved(args.links_file),
+        overwrite=args.overwrite,
+    )
+    print("paper_pdf_links.jsonl generado")
+    print(f"- Escritos:   {written}")
+    print(f"- Omitidos:   {skipped}")
+    print(f"- links_file: {ctx.display_path(_resolved(args.links_file))}")
 
 
 def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
@@ -398,7 +410,7 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
         help="Explora candidatos a partir de seed-dois y guarda metadata",
         description=(
             "Explora candidatos desde seed DOIs y guarda metadata en "
-            f"{ctx.display_path(ctx.METADATA_DIR)}."
+            "data/lake/paper_metadata.jsonl."
         ),
     )
     metadata_explore_parser.add_argument(
@@ -423,8 +435,8 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
     metadata_from_doi_parser.add_argument(
         "--output-dir",
         type=Path,
-        default=ctx.METADATA_DIR,
-        help=f"Directorio de salida metadata (default: {ctx.display_path(ctx.METADATA_DIR)})",
+        default=ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
+        help="Archivo JSONL de salida metadata (default: data/lake/paper_metadata.jsonl)",
     )
     metadata_from_doi_parser.add_argument(
         "--overwrite",
@@ -462,66 +474,106 @@ def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argpar
     metadata_seed_dois_parser.set_defaults(handler=cmd_metadata_seed_dois)
 
 
-def _add_metadata_to_pdf_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    metadata_to_pdf_parser = _add_parser(
+def _add_bibliography_export_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    bibliography_parser = _add_parser(
         subparsers,
-        "metadata-to-pdf",
-        help="Genera bibliografia y normaliza PDFs hacia entradas activas",
-        description="Convierte metadata y PDFs crudos en PDFs activos normalizados para procesamiento.",
+        "bibliography-export",
+        help="Genera bibliografia BibTeX desde metadata canonical",
+        description="Exporta data/lake/paper_metadata.jsonl a un BibTeX DOI-only para flujos externos como Zotero.",
     )
-    metadata_to_pdf_subparsers = _command_subparsers(metadata_to_pdf_parser, "metadata_to_pdf_command")
+    bibliography_subparsers = _command_subparsers(bibliography_parser, "bibliography_export_command")
 
     bib_generate_parser = _add_parser(
-        metadata_to_pdf_subparsers,
+        bibliography_subparsers,
         "generate-bib",
         help="Genera un archivo .bib",
     )
     bib_generate_parser.add_argument("--output", type=Path, default=None, help="Ruta opcional del archivo .bib")
     bib_generate_parser.add_argument(
-        "--input-csv",
+        "--input-jsonl",
         type=Path,
-        default=None,
-        help="CSV opcional como fuente, por ejemplo data/reports/exports/missing_pdf_items.csv",
+        default=ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
+        help="Paper metadata JSONL canonical para generar BibTeX DOI-only.",
     )
     bib_generate_parser.set_defaults(handler=cmd_bib_generate)
 
-    pdfs_normalize_parser = _add_parser(
-        metadata_to_pdf_subparsers,
-        "normalize-pdfs",
-        help=(
-            "Normaliza raw PDFs hacia nombres DOI-first usando doi_pdf_relations*.csv "
-            f"({ctx.display_path(ctx.RAW_PDF_DIR)} -> {ctx.display_path(ctx.DOCLING_INPUT_DIR)})"
-        ),
+def _add_pdf_intake_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    pdf_intake_parser = _add_parser(
+        subparsers,
+        "pdf-intake",
+        help="Linkea PDFs obtenidos manualmente con metadata canonical",
         description=(
-            "Normaliza raw PDFs hacia nombres DOI-first usando doi_pdf_relations*.csv "
-            f"({ctx.display_path(ctx.RAW_PDF_DIR)} -> {ctx.display_path(ctx.DOCLING_INPUT_DIR)})"
+            "Toma PDFs desde artifacts/intake, los mueve a artifacts/pdfs con paper_id hasheado "
+            "y registra data/lake/paper_pdf_links.jsonl."
         ),
     )
-    pdfs_normalize_parser.add_argument(
-        "--raw-dir",
-        type=Path,
-        default=ctx.RAW_PDF_DIR,
-        help=f"Directorio fuente de PDFs crudos (default: {ctx.display_path(ctx.RAW_PDF_DIR)})",
+    pdf_intake_subparsers = _command_subparsers(pdf_intake_parser, "pdf_intake_command")
+
+    link_parser = _add_parser(
+        pdf_intake_subparsers,
+        "link",
+        help="Mueve un PDF manual a artifacts/pdfs y registra su vínculo",
     )
-    pdfs_normalize_parser.add_argument(
-        "--input-dir",
+    link_parser.add_argument("--metadata-id", required=True, help="metadata_id existente en paper_metadata.jsonl.")
+    link_parser.add_argument(
+        "--pdf",
         type=Path,
-        default=ctx.DOCLING_INPUT_DIR,
-        help=f"Directorio destino normalizado (default: {ctx.display_path(ctx.DOCLING_INPUT_DIR)})",
+        required=True,
+        help=f"PDF fuente, normalmente bajo {ctx.display_path(ctx.DATA_ARTIFACTS_INTAKE_PDFS_DIR)}.",
     )
-    pdfs_normalize_parser.add_argument(
-        "--unmatched-dir",
+    link_parser.add_argument(
+        "--metadata-file",
         type=Path,
-        default=ctx.UNMATCHED_PDF_DIR,
-        help=f"Destino para PDFs sin DOI resuelto (default: {ctx.display_path(ctx.UNMATCHED_PDF_DIR)})",
+        default=ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
+        help="JSONL canonical de metadata.",
     )
-    pdfs_normalize_parser.add_argument(
-        "--relations-csv",
+    link_parser.add_argument(
+        "--artifact-dir",
         type=Path,
-        default=None,
-        help="CSV doi_pdf_relations explicito. Si no se indica, usa el ultimo encontrado en data/reports.",
+        default=ctx.DATA_ARTIFACTS_PDFS_DIR,
+        help=f"Destino de PDFs canonicales (default: {ctx.display_path(ctx.DATA_ARTIFACTS_PDFS_DIR)}).",
     )
-    pdfs_normalize_parser.set_defaults(handler=cmd_pdfs_normalize)
+    link_parser.add_argument(
+        "--links-file",
+        type=Path,
+        default=ctx.DATA_LAKE_PAPER_PDF_LINKS_FILE,
+        help=f"JSONL de vinculos metadata/PDF (default: {ctx.display_path(ctx.DATA_LAKE_PAPER_PDF_LINKS_FILE)}).",
+    )
+    link_parser.add_argument("--copy", action="store_true", help="Copia el PDF en vez de moverlo desde intake.")
+    link_parser.add_argument("--overwrite", action="store_true", help="Sobrescribe el PDF artifact si ya existe.")
+    link_parser.set_defaults(handler=cmd_pdf_intake_link)
+
+    backfill_parser = _add_parser(
+        pdf_intake_subparsers,
+        "backfill-links",
+        help="Genera paper_pdf_links.jsonl desde PDFs artifact existentes y links legacy",
+    )
+    backfill_parser.add_argument(
+        "--metadata-file",
+        type=Path,
+        default=ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
+        help="JSONL canonical de metadata.",
+    )
+    backfill_parser.add_argument(
+        "--legacy-links-file",
+        type=Path,
+        default=ctx.DATA_LAKE_DIR / "links.jsonl",
+        help="JSONL legacy con paper_id y DOI.",
+    )
+    backfill_parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        default=ctx.DATA_ARTIFACTS_PDFS_DIR,
+        help=f"Directorio de PDFs artifact existentes (default: {ctx.display_path(ctx.DATA_ARTIFACTS_PDFS_DIR)}).",
+    )
+    backfill_parser.add_argument(
+        "--links-file",
+        type=Path,
+        default=ctx.DATA_LAKE_PAPER_PDF_LINKS_FILE,
+        help=f"JSONL de salida (default: {ctx.display_path(ctx.DATA_LAKE_PAPER_PDF_LINKS_FILE)}).",
+    )
+    backfill_parser.add_argument("--overwrite", action="store_true", help="Sobrescribe links_file si ya existe.")
+    backfill_parser.set_defaults(handler=cmd_pdf_intake_backfill_links)
 
 
 def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -583,10 +635,10 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     markdown_parser = _add_parser(
         pdf_processing_subparsers,
         "markdown",
-        help="Convierte los PDFs activos a paper.md usando solo Docling",
+        help="Convierte los PDFs artifact a paper.md usando solo Docling",
         description=(
             "Convierte PDFs a Markdown con Docling sin ejecutar batching ni LLM. "
-            "Por defecto lee data/runtime/02-pdfs/active y escribe "
+            "Por defecto lee data/artifacts/pdfs y escribe "
             "data/runtime/03-pdf_processing/<paper_id>/paper.md."
         ),
     )
@@ -788,29 +840,6 @@ def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.Argum
     )
     data_layout_create_parser.set_defaults(handler=cmd_data_layout_create)
 
-def _add_bridge_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    bridge_parser = _add_parser(
-        subparsers,
-        "bridge",
-        help="Comunicacion con registry, storage y eventos Victus",
-        description=(
-            "Comandos de integracion para registrar PDFs, publicar artifacts/eventos, "
-            "marcar stages y consultar estado en la infraestructura Victus."
-        ),
-    )
-    try:
-        from ops.scripts.bridge.victus_ingest_bridge import cli as bridge_cli
-    except ModuleNotFoundError:
-        bridge_parser.set_defaults(
-            handler=lambda args: (_ for _ in ()).throw(
-                SystemExit("Bridge CLI no esta disponible en ops/scripts/bridge.")
-            )
-        )
-        return
-
-    bridge_cli.configure_parser(bridge_parser)
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=CLI_DESCRIPTION,
@@ -819,11 +848,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = _command_subparsers(parser, "command")
 
     _add_metadata_extraction_group(subparsers)
-    _add_metadata_to_pdf_group(subparsers)
+    _add_bibliography_export_group(subparsers)
+    _add_pdf_intake_group(subparsers)
     _add_pdf_processing_group(subparsers)
     _add_evidence_extraction_group(subparsers)
     _add_testing_pipeline_group(subparsers)
-    _add_bridge_group(subparsers)
     _add_data_layout_group(subparsers)
 
     return parser

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
@@ -14,6 +14,8 @@ DATA_LAKE_DIR = DATA_DIR / "lake"
 DATA_ARTIFACTS_DIR = DATA_DIR / "artifacts"
 DATA_ARTIFACTS_PDFS_DIR = DATA_ARTIFACTS_DIR / "pdfs"
 DATA_ARTIFACTS_MARKDOWN_DIR = DATA_ARTIFACTS_DIR / "markdown"
+DATA_ARTIFACTS_INTAKE_DIR = DATA_ARTIFACTS_DIR / "intake"
+DATA_ARTIFACTS_INTAKE_PDFS_DIR = DATA_ARTIFACTS_INTAKE_DIR / "pdfs"
 VICTUS_DATA_STORAGE_ROOT = DATA_ARTIFACTS_DIR / "victus-data"
 VICTUS_OPS_STORAGE_ROOT = DATA_ARTIFACTS_DIR / "victus-ops"
 DATA_DEBUG_DIR = DATA_DIR / "debug"
@@ -30,12 +32,7 @@ DATA_INPUT_IMPORTS_DIR = DATA_INPUTS_DIR / "imports"
 DATA_REGISTRY_DIR = DATA_DIR / "registry"
 DATA_RUNTIME_DIR = DATA_DIR / "runtime"
 DATA_RUNTIME_RUNS_DIR = DATA_RUNTIME_DIR / "runs"
-DATA_RUNTIME_CANDIDATES_DIR = DATA_RUNTIME_DIR / "01-candidates"
-DATA_RUNTIME_CANDIDATES_ACTIVE_DIR = DATA_RUNTIME_CANDIDATES_DIR / "active"
-DATA_RUNTIME_CANDIDATES_DISCARDED_DIR = DATA_RUNTIME_CANDIDATES_DIR / "discarded"
 DATA_RUNTIME_PDF_RETRIEVAL_DIR = DATA_RUNTIME_DIR / "pdf_retrieval"
-DATA_RUNTIME_PDFS_DIR = DATA_RUNTIME_DIR / "02-pdfs"
-DATA_RUNTIME_PDFS_ACTIVE_DIR = DATA_RUNTIME_PDFS_DIR / "active"
 DATA_RUNTIME_DOCLING_DIR = DATA_RUNTIME_DIR / "docling"
 DATA_RUNTIME_PDF_PROCESSING_DIR = DATA_RUNTIME_DIR / "03-pdf_processing"
 DATA_RUNTIME_EVIDENCE_DIR = DATA_RUNTIME_DIR / "04-evidence"
@@ -50,10 +47,8 @@ DATA_ARCHIVE_LEGACY_DIR = DATA_ARCHIVE_DIR / "legacy"
 DATA_ARCHIVE_EXPERIMENTS_DIR = DATA_ARCHIVE_DIR / "experiments"
 DATA_TESTING_DIR = DATA_DIR / "testing"
 DATA_TESTING_RUNS_DIR = DATA_TESTING_DIR / "runs"
-DATA_LAKE_PAPERS_FILE = DATA_LAKE_DIR / "papers.jsonl"
 DATA_LAKE_PAPER_CANDIDATES_FILE = DATA_LAKE_DIR / "paper_candidates.jsonl"
-DATA_LAKE_PAPER_REVIEW_DECISIONS_FILE = DATA_LAKE_DIR / "paper_review_decisions.jsonl"
-DATA_LAKE_PDF_RELATIONS_FILE = DATA_LAKE_DIR / "pdf_relations.jsonl"
+DATA_LAKE_PAPER_PDF_LINKS_FILE = DATA_LAKE_DIR / "paper_pdf_links.jsonl"
 DATA_LAKE_STRUCTURED_BLOCKS_FILE = DATA_LAKE_DIR / "structured_blocks.jsonl"
 DATA_LAKE_PAPER_CLASSIFICATIONS_FILE = DATA_LAKE_DIR / "paper_classifications.jsonl"
 DATA_LAKE_EXPERIMENT_MAPS_FILE = DATA_LAKE_DIR / "experiment_maps.jsonl"
@@ -168,21 +163,13 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
     storage_cfg = cfg.get("storage") or {}
     docling_cfg = cfg.get("docling_ingestion") or {}
 
-    metadata_dir = resolve_project_path(
-        storage_cfg.get("papers_dir"),
-        DATA_RUNTIME_CANDIDATES_ACTIVE_DIR,
-    )
-    discarded_dir = resolve_project_path(
-        storage_cfg.get("discarded_dir"),
-        DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
-    )
     registry_dir = resolve_project_path(
         storage_cfg.get("registry_dir"),
         DATA_REGISTRY_DIR,
     )
     raw_pdf_dir = resolve_project_path(
         storage_cfg.get("raw_pdf_dir"),
-        DATA_RUNTIME_PDF_RETRIEVAL_DIR / "raw",
+        DATA_ARTIFACTS_INTAKE_PDFS_DIR,
     )
     unmatched_pdf_dir = resolve_project_path(
         storage_cfg.get("unmatched_pdf_dir"),
@@ -191,7 +178,7 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
 
     docling_input_dir = resolve_project_path(
         docling_cfg.get("input_dir"),
-        DATA_RUNTIME_PDFS_DIR / "normalized",
+        DATA_ARTIFACTS_PDFS_DIR,
     )
     docling_heuristics_dir = resolve_project_path(
         docling_cfg.get("output_dir"),
@@ -203,8 +190,6 @@ def get_pipeline_paths(config: dict[str, Any] | None = None) -> dict[str, Path]:
     )
 
     return {
-        "metadata_dir": metadata_dir,
-        "discarded_dir": discarded_dir,
         "registry_dir": registry_dir,
         "raw_pdf_dir": raw_pdf_dir,
         "unmatched_pdf_dir": unmatched_pdf_dir,
@@ -257,6 +242,8 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_ARTIFACTS_DIR,
         DATA_ARTIFACTS_PDFS_DIR,
         DATA_ARTIFACTS_MARKDOWN_DIR,
+        DATA_ARTIFACTS_INTAKE_DIR,
+        DATA_ARTIFACTS_INTAKE_PDFS_DIR,
         DATA_DEBUG_DIR,
         DATA_DEBUG_RUNS_DIR,
         DATA_SOURCES_DIR,
@@ -268,11 +255,6 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_REGISTRY_DIR,
         DATA_RUNTIME_DIR,
         DATA_RUNTIME_RUNS_DIR,
-        DATA_RUNTIME_CANDIDATES_DIR,
-        DATA_RUNTIME_CANDIDATES_ACTIVE_DIR,
-        DATA_RUNTIME_CANDIDATES_DISCARDED_DIR,
-        DATA_RUNTIME_PDFS_DIR,
-        DATA_RUNTIME_PDFS_ACTIVE_DIR,
         DATA_RUNTIME_PDF_PROCESSING_DIR,
         DATA_RUNTIME_EVIDENCE_DIR,
         DATA_TESTING_DIR,
@@ -282,7 +264,6 @@ def get_data_layout_dirs() -> tuple[Path, ...]:
         DATA_REPORTS_AUDITS_DIR,
         PRE_INGESTION_EDITABLE_DIR,
         PRE_INGESTION_DIR,
-        METADATA_DIR,
         DOCLING_INPUT_DIR,
         UNMATCHED_PDF_DIR,
         DOCLING_HEURISTICS_DIR,
@@ -320,7 +301,6 @@ def get_env_or_config(
 CONFIG = get_config()
 PATHS = get_pipeline_paths(CONFIG)
 
-METADATA_DIR = PATHS["metadata_dir"]
 DOCLING_INPUT_DIR = PATHS["docling_input_dir"]
 DOCLING_HEURISTICS_DIR = PATHS["docling_heuristics_dir"]
 EVIDENCE_OUTPUT_DIR = PATHS["evidence_output_dir"]
@@ -337,8 +317,8 @@ LANGFUSE_SECRET_KEY = get_env_or_config("LANGFUSE_SECRET_KEY", default="")
 LANGFUSE_HOST = get_env_or_config("LANGFUSE_HOST", default="")
 PROMPT_LABEL = get_env_or_config("PROMPT_LABEL", default="production") or "production"
 PROMPTS_LOCAL_DIR = resolve_project_path(
-    get_env_or_config("PROMPTS_LOCAL_DIR", default="src/prompts/local"),
-    ROOT_DIR / "src/prompts/local",
+    get_env_or_config("PROMPTS_LOCAL_DIR", default="src/prompts"),
+    ROOT_DIR / "src/prompts",
 )
 DEFAULT_LLM_MODEL = (
     get_env_or_config("DEFAULT_LLM_MODEL", default="litellm_proxy/gemini-flash-lite")
@@ -354,7 +334,7 @@ REGISTRY_FILE = REGISTRY_DIR / "documents.jsonl"
 ARTIFACT_MANIFEST_FILE = REGISTRY_DIR / "artifact_manifest.jsonl"
 ARTIFACT_REGISTRY_FILE = REGISTRY_DIR / "artifact_registry.jsonl"
 LINKS_FILE = REGISTRY_DIR / "links.jsonl"
-BIB_OUTPUT_FILE = METADATA_DIR / "papers.bib"
+BIB_OUTPUT_FILE = DATA_LAKE_DIR / "paper_metadata.bib"
 
 
 def display_path(path: Path) -> str:
@@ -374,10 +354,3 @@ def resolve_available_raw_pdf_dir(raw_pdf_dir: Path | None = None) -> Path:
     if legacy_candidate.exists() and any(legacy_candidate.glob("*.pdf")):
         return legacy_candidate
     return candidate
-
-
-@lru_cache(maxsize=1)
-def resolve_raw_pdf_sync() -> Callable[[Path, Path, Path, Path | None], tuple[int, int]]:
-    from src.application.metadata_to_pdf.normalization import sync_raw_pdfs_into_input
-
-    return sync_raw_pdfs_into_input

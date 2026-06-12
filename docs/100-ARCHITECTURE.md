@@ -61,26 +61,39 @@ files, not hidden in memory or remote services.
 - **Responsibility:** discover, fetch, classify, and store paper metadata
   candidates.
 - **Inputs:** seed DOI queues, DOI arguments, Semantic Scholar responses.
-- **Outputs:** metadata JSON, reviewed indexes, discarded indexes.
+- **Outputs:** `data/lake/paper_metadata.jsonl` plus compatibility candidate
+  state for legacy exploration paths.
 - **Dependencies:** Semantic Scholar API, internal LLM client port.
 - **Boundary:** covers pre-PDF candidate state.
 
-### Metadata To PDF Stage
+### Bibliography Export Utility
 
-- **Path:** `src/application/metadata_to_pdf/`
-- **Responsibility:** generate bibliography outputs and normalize raw PDFs into
-  active pipeline inputs.
-- **Inputs:** metadata records, relation CSV files, raw PDFs.
-- **Outputs:** BibTeX artifacts and active PDFs.
+- **Path:** `src/application/bibliography_export.py`
+- **Responsibility:** generate DOI-only BibTeX outputs for external PDF
+  retrieval workflows such as Zotero.
+- **Inputs:** metadata records.
+- **Outputs:** BibTeX artifacts.
 - **Dependencies:** local filesystem.
-- **Boundary:** covers conversion into PDF-processing inputs.
+- **Boundary:** utility export only; it is not a full pipeline stage and does
+  not own PDF retrieval or PDF artifacts.
+
+### PDF Intake Stage
+
+- **Path:** `src/application/pdf_intake.py`
+- **Responsibility:** link manually obtained PDFs to metadata and promote them
+  to canonical PDF artifacts.
+- **Inputs:** explicit `metadata_id` values and manually staged PDFs.
+- **Outputs:** `data/artifacts/pdfs/{paper_id}.pdf` and
+  `data/lake/paper_pdf_links.jsonl`.
+- **Dependencies:** local filesystem.
+- **Boundary:** covers manual PDF intake, not external PDF retrieval.
 
 ### PDF Processing Stage
 
 - **Path:** `src/application/pdf_processing/`
-- **Responsibility:** convert active PDFs into Markdown, split Markdown into
+- **Responsibility:** convert PDF artifacts into Markdown, split Markdown into
   batches, call the internal LLM client, validate batch outputs, and merge structured paper JSON.
-- **Inputs:** active PDFs, prompt files, PDF-processing config.
+- **Inputs:** PDF artifacts, prompt files, PDF-processing config.
 - **Outputs:** Markdown, raw batch JSON, merged structured paper JSON, status.
 - **Dependencies:** Docling, internal LLM client port.
 - **Boundary:** covers post-PDF structured paper artifacts.
@@ -101,7 +114,7 @@ files, not hidden in memory or remote services.
 
 - **Path:** `src/application/testing_pipeline/`
 - **Responsibility:** prepare per-paper review folders and testing artifacts.
-- **Inputs:** active PDFs, optional reused Markdown, PDF-processing outputs,
+- **Inputs:** PDF artifacts, optional reused Markdown, PDF-processing outputs,
   evidence outputs.
 - **Outputs:** `data/testing/{paper_id}/` review workspaces.
 - **Dependencies:** PDF-processing and evidence-extraction stages.
@@ -136,7 +149,6 @@ External boundaries:
 - LiteLLM provides provider routing, model selection, retries, fallbacks, and
   provider credentials for all LLM requests.
 - Langfuse observes only LLM request boundaries.
-- Optional Victus bridge integrations are outside the core local pipeline.
 - Analytics, RAG indexing, vector stores, and production deployment are outside
   this repository.
 
@@ -147,10 +159,10 @@ High-level runtime sequence:
 ```text
 seed DOI or DOI argument
   -> metadata stage
-  -> metadata candidate artifacts
-  -> raw PDF availability
-  -> PDF normalization
-  -> active PDF
+  -> metadata lake records
+  -> bibliography export for Zotero/manual retrieval
+  -> manual PDF intake
+  -> PDF artifact
   -> PDF processing
   -> structured paper JSON
   -> trimming
@@ -168,8 +180,8 @@ Main artifact movement:
 
 ```text
 data/inputs/
-  -> data/runtime/01-candidates/
-  -> data/runtime/02-pdfs/active/
+  -> data/lake/paper_metadata.jsonl
+  -> data/artifacts/pdfs/
   -> data/runtime/03-pdf_processing/
   -> data/runtime/04-evidence/
 ```
@@ -177,8 +189,8 @@ data/inputs/
 Artifact roles:
 
 - `data/inputs/`: seed queues, rules, and imports.
-- `data/runtime/01-candidates/`: pre-PDF metadata state.
-- `data/runtime/02-pdfs/active/`: normalized PDFs ready for processing.
+- `data/lake/paper_metadata.jsonl`: canonical pre-PDF metadata state.
+- `data/artifacts/pdfs/`: canonical PDFs ready for processing.
 - `data/runtime/03-pdf_processing/`: Markdown, raw batches, structured block
   artifacts, and processing status.
 - `data/runtime/04-evidence/`: trimmed block inputs, experiment maps, and
@@ -206,8 +218,6 @@ Detailed path, handoff, configuration, CLI, and schema contracts live in
 - **Langfuse:** LLM request boundary tracing.
 - **Docling:** local PDF-to-Markdown conversion.
 - **Local filesystem:** primary durable state store.
-- **Optional Victus infrastructure:** bridge-facing registry, object storage,
-  events, Postgres, Redis, or S3-compatible services.
 
 ## 8. Documentation Links
 

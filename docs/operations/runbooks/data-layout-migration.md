@@ -52,9 +52,6 @@ The command refuses to apply if conflicts exist.
 - `data/runtime/02-pdfs/active/*.pdf` -> `data/artifacts/pdfs/*.pdf`
 - `data/runtime/03-pdf_processing/{paper_id}/paper.md` ->
   `data/artifacts/markdown/{paper_id}.md`
-- `data/registry/papers.jsonl` -> `data/lake/papers.jsonl`
-- `data/runtime/01-candidates/reviewed.jsonl` ->
-  `data/lake/paper_review_decisions.jsonl`
 
 ## Manual Decision Categories
 

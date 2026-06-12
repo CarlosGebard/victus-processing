@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
 title: Victus Processing Data Layout Contract
 status: source-of-truth
-updated_at: 2026-06-10
+updated_at: 2026-06-11
 related_components:
   - src.workspace.config
   - src.workspace.data_layout
@@ -55,10 +55,9 @@ data/
       candidates_seed_dois.jsonl
 
   lake/
-    papers.jsonl
+    paper_metadata.jsonl
     paper_candidates.jsonl
-    paper_review_decisions.jsonl
-    pdf_relations.jsonl
+    paper_pdf_links.jsonl
     structured_blocks.jsonl
     paper_classifications.jsonl
     experiment_maps.jsonl
@@ -69,6 +68,8 @@ data/
     paper_stage_state.jsonl
 
   artifacts/
+    intake/
+      pdfs/
     pdfs/
       {paper_id}.pdf
     markdown/
@@ -121,6 +122,12 @@ data/
 ## 4. Guarantees
 
 - `data/lake/` stores canonical local JSONL datasets.
+- `data/lake/paper_metadata.jsonl` is the canonical metadata index and dedupe
+  source for metadata exploration reruns.
+- `data/artifacts/intake/pdfs/` is a manual staging area for PDFs obtained
+  outside this repository.
+- `data/lake/paper_pdf_links.jsonl` stores the append-only metadata-to-PDF
+  links created during manual PDF intake.
 - `data/artifacts/` stores physical payloads such as PDFs and Markdown.
 - `data/artifacts/victus-data/` stores one primary file per paper per stage for
   this phase; do not introduce raw/bronze/silver/gold tiers yet.

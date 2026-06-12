@@ -472,8 +472,6 @@ Core implementation:
 Operational scripts:
 
 - `ops/scripts/data/migrate_data_layout.py`
-- `ops/scripts/data/rebuild_reviewed_index.py`
-- `ops/scripts/data/convert_seed_dois_to_jsonl.py`
 
 Database:
 

@@ -22,6 +22,14 @@ def metadata_section(payload: Any) -> dict[str, Any] | None:
     section = payload.get("metadata")
     if isinstance(section, dict):
         return section
+    source_metadata = payload.get("source_metadata")
+    if isinstance(source_metadata, dict):
+        return {
+            "doi": source_metadata.get("doi"),
+            "title": source_metadata.get("title"),
+            "abstract": source_metadata.get("abstract"),
+            "citationCount": source_metadata.get("citation_count"),
+        }
     return payload
 
 
@@ -89,7 +97,7 @@ def _parse_citation_count(value: Any) -> int:
 
 
 def collect_candidate_rows(
-    metadata_dir: Path,
+    metadata_file: Path,
     *,
     explored_dois: set[str],
     keywords: list[str],
@@ -97,9 +105,12 @@ def collect_candidate_rows(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
-    for metadata_file in sorted(metadata_dir.rglob("*.json")):
+    for raw_line in metadata_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
         try:
-            payload = json.loads(metadata_file.read_text(encoding="utf-8"))
+            payload = json.loads(line)
         except Exception:
             continue
 
@@ -168,10 +179,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument(
-        "--metadata-dir",
+        "--metadata-file",
         type=Path,
-        default=ctx.METADATA_DIR,
-        help="Directorio de metadata canonica local.",
+        default=ctx.DATA_LAKE_DIR / "paper_metadata.jsonl",
+        help="JSONL de metadata canonica local.",
     )
     parser.add_argument(
         "--explored-dois",
@@ -208,20 +219,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    metadata_dir = args.metadata_dir.expanduser().resolve()
+    metadata_file = args.metadata_file.expanduser().resolve()
     explored_dois_file = args.explored_dois.expanduser().resolve()
     terms_file = args.terms_file.expanduser().resolve()
     output_path = args.output.expanduser().resolve()
 
-    if not metadata_dir.exists():
-        raise SystemExit(f"No existe metadata_dir: {metadata_dir}")
+    if not metadata_file.exists():
+        raise SystemExit(f"No existe metadata_file: {metadata_file}")
     if not terms_file.exists():
         raise SystemExit(f"No existe terms_file: {terms_file}")
 
     keywords = load_keyword_dictionary(terms_file)
     explored_dois = load_explored_dois(explored_dois_file)
     rows = collect_candidate_rows(
-        metadata_dir,
+        metadata_file,
         explored_dois=explored_dois,
         keywords=keywords,
         min_citations=max(0, int(args.min_citations)),
@@ -229,7 +240,7 @@ def main() -> int:
     written = write_doi_output(rows, output_path, limit=max(0, int(args.limit)))
 
     print("Metadata seed DOI candidates")
-    print(f"- metadata_dir:     {ctx.display_path(metadata_dir)}")
+    print(f"- metadata_file:    {ctx.display_path(metadata_file)}")
     print(f"- explored_dois:    {ctx.display_path(explored_dois_file)}")
     print(f"- terms_file:       {ctx.display_path(terms_file)}")
     print(f"- output:           {ctx.display_path(output_path)}")

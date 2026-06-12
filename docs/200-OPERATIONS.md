@@ -37,8 +37,6 @@ Primary operational responsibilities:
   routing.
 - **Container runtime:** Dockerfile exists, but no production deployment flow is
   defined in this repository.
-- **Victus bridge runtime:** optional integration path when bridge dependencies
-  and infrastructure configuration are available.
 
 ## 3. Execution Workflows
 
@@ -58,7 +56,8 @@ Run the main local flow:
 
 ```bash
 uv run victus-processing metadata-extraction explore --mode broad-nutrition
-uv run victus-processing metadata-to-pdf normalize-pdfs
+uv run victus-processing bibliography-export generate-bib
+uv run victus-processing pdf-intake link --metadata-id meta:s2:example --pdf data/artifacts/intake/pdfs/example.pdf
 uv run victus-processing pdf-processing run
 uv run victus-processing evidence-extraction run
 ```
@@ -68,6 +67,8 @@ Run a single DOI metadata fetch:
 ```bash
 uv run victus-processing metadata-extraction from-doi --doi 10.1000/demo
 ```
+
+This writes directly to `data/lake/paper_metadata.jsonl`.
 
 Run smoke validation:
 
@@ -114,7 +115,7 @@ Prompt Management:
 
 - Langfuse Prompt Management is the primary prompt source when Langfuse
   credentials are injected.
-- Local markdown prompts under `src/prompts/local/` are fallback prompts.
+- Local markdown prompts under `src/prompts/` are fallback prompts.
 - Local prompt defaults do not set `max_tokens`; explicit stage config or remote
   prompt config must provide output-token limits.
 - LiteLLM remains the execution adapter and does not fetch prompts.
@@ -155,8 +156,8 @@ Operational inspection sources:
   public rate limits.
 - LLM 429/5xx/network errors: LiteLLM handles retries, fallbacks, provider routing,
   and quota behavior.
-- Missing PDFs: ensure normalized PDFs exist under
-  `data/runtime/02-pdfs/active/`.
+- Missing PDFs: ensure linked PDF artifacts exist under
+  `data/artifacts/pdfs/`.
 - Unexpected CLI behavior: run `uv run victus-processing --help` and the smoke
   test before editing stage code.
 
@@ -185,7 +186,7 @@ Operations does not cover:
 - [CLI operations](operations/cli.md)
 - [Contract synchronization](operations/contracts-sync.md)
 - [PDF processing operations](operations/pdf-processing.md)
-- [Pipeline runbooks](operations/pipelines/)
+- [Pipeline runbooks](operations/pipeline/)
 - [Runbooks](operations/runbooks/)
 - [PostgreSQL pipeline records](operations/runbooks/postgres-pipeline-records.md)
 - [Data layout migration](operations/runbooks/data-layout-migration.md)

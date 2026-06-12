@@ -11,19 +11,20 @@ tags:
 
 # PDF Processing
 
-Purpose: convert active PDFs into Markdown and structured paper JSON.
+Purpose: convert canonical PDF artifacts into Markdown and structured paper
+JSON.
 
 Commands:
 
 ```bash
 uv run victus-processing pdf-processing markdown --limit 10
 uv run victus-processing pdf-processing run --limit 5
-uv run victus-processing pdf-processing run --pdf data/runtime/02-pdfs/active/paper.pdf
+uv run victus-processing pdf-processing run --pdf data/artifacts/pdfs/{paper_id}.pdf
 ```
 
 Inputs:
 
-- active PDFs under `data/runtime/02-pdfs/active/`;
+- PDF artifacts under `data/artifacts/pdfs/`;
 - PDF-processing prompts under `src/prompts/`;
 - `config/pdf_processing.yaml`;
 - LiteLLM provider credentials and routing configuration.

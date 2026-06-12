@@ -2,10 +2,11 @@
 id: VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT
 title: Victus Processing Stage Handoffs Contract
 status: source-of-truth
-updated_at: 2026-06-06
+updated_at: 2026-06-11
 related_components:
   - src.application.metadata_extraction
-  - src.application.metadata_to_pdf
+  - src.application.bibliography_export
+  - src.application.pdf_intake
   - src.application.pdf_processing
   - src.application.evidence_extraction
   - src.application.ports.llm
@@ -30,8 +31,8 @@ must preserve these handoffs before changing stage internals.
 Covered stages:
 
 - metadata;
-- bibliography;
-- PDF normalization;
+- bibliography export;
+- manual PDF intake;
 - PDF-processing Markdown and LLM extraction;
 - trimming;
 - experiment scope mapping;
@@ -56,9 +57,11 @@ Not covered:
 
 ```text
 data/inputs/seeds/*.jsonl or --doi
-  -> metadata JSON under data/runtime/01-candidates/active/
-  -> optional BibTeX and relation/audit reports
-  -> active PDFs under data/runtime/02-pdfs/active/
+  -> data/lake/paper_metadata.jsonl
+  -> optional data/lake/paper_metadata.bib
+  -> manual PDFs under data/artifacts/intake/pdfs/
+  -> data/lake/paper_pdf_links.jsonl
+  -> data/artifacts/pdfs/{paper_id}.pdf
   -> data/runtime/03-pdf_processing/{paper_id}/paper.md
   -> data/runtime/03-pdf_processing/{paper_id}/raw_batches/*.json
   -> data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
@@ -73,28 +76,35 @@ data/inputs/seeds/*.jsonl or --doi
 ### Metadata
 
 - Inputs are DOI seed queues or a single DOI argument.
-- Outputs are metadata records and reviewed/discarded candidate state.
+- Output is normalized paper metadata in `data/lake/paper_metadata.jsonl`.
+- Legacy candidate JSON and discarded indexes may be read for dedupe or
+  migration, but they are not the canonical handoff.
 - The stage covers pre-PDF candidate state only.
 - `document_id` must not be treated as the post-PDF `paper_id` unless a
   specific compatibility path explicitly maps it.
 
-### Bibliography
+### Bibliography Export
 
-- Inputs are metadata JSON files or an explicit CSV.
-- Output is a BibTeX file.
+- Input is `data/lake/paper_metadata.jsonl`.
+- Output is `data/lake/paper_metadata.bib`.
 - The command is a derived export and must not mutate candidate state.
+- Bibliography export is a utility command, not a full pipeline stage.
 
-### PDF Normalization
+### Manual PDF Intake
 
-- Inputs are raw PDFs plus DOI/PDF relation data.
-- Outputs are normalized active PDFs.
-- PDFs without resolved DOI relation belong in the configured unmatched
-  location.
-- Downstream `paper_id` is derived from active PDF filename stem.
+- Inputs are manually obtained PDFs plus an explicit `metadata_id`.
+- Manual PDFs are staged under `data/artifacts/intake/pdfs/`.
+- Output link records append to `data/lake/paper_pdf_links.jsonl`.
+- The selected minimal link fields are `metadata_id`, `paper_id`, `doi`,
+  `source_pdf_path`, `artifact_pdf_path`, `linked_at`, and `link_method`.
+- PDF artifacts are stored as `data/artifacts/pdfs/{paper_id}.pdf`.
+- New manual intake derives `paper_id` from `metadata_id`.
+- Backfill preserves existing artifact filename stems as `paper_id` and must
+  resolve `metadata_id` through legacy DOI links before writing a record.
 
 ### PDF Processing
 
-- Inputs are active PDFs, Markdown prompts, an injected LLM client, and
+- Inputs are PDF artifacts, Markdown prompts, an injected LLM client, and
   `pdf_processing` config.
 - Outputs are `paper.md`, raw LLM batch JSON, `paper.processed.json`,
   `paper.final.json`, and status JSONL.

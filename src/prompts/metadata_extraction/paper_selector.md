@@ -29,6 +29,11 @@ Rules:
 Output valid JSON only:
 
 {
-"decision": "keep" | "drop" | "uncertain",
+"decisions": [
+  {
+    "id": "...",
+    "decision": "keep" | "drop" | "uncertain",
+    "reason": "short reason grounded in the title"
+  }
+]
 }
-

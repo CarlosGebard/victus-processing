@@ -24,7 +24,7 @@ uv run victus-processing testing-pipeline run --paper-id {paper_id} --reuse-mark
 
 Inputs:
 
-- active PDFs or selected `--paper-id` values;
+- PDF artifacts or selected `--paper-id` values;
 - optional reused Markdown from a configured markdown directory;
 - PDF-processing and evidence prompts;
 - LiteLLM provider credentials and routing configuration.

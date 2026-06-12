@@ -56,7 +56,7 @@
       "version": "v1",
       "source_path": "docs/contracts/processing/README.md",
       "destination_path": "docs/contracts/fundamental/processing/README.md",
-      "checksum": "sha256:2f50592f510dd693c35d090a08620840308730b2bb7e8cd536bb925e12fad0bc"
+      "checksum": "sha256:d9cb8808751f3aa7af37e6722cfe2921296c9fc2107547946f79ea4d596e2217"
     },
     {
       "contract_id": "victus.storage.artifact_manifest",
