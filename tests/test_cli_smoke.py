@@ -14,6 +14,13 @@ from src.application.metadata_extraction import citation_exploration
 from src.application.metadata_extraction.paper_selector import PaperCandidate, classify_papers_with_llm
 from src.application.ports.llm import LLMRequest, LLMResponse
 from src.application.pdf_intake import link_manual_pdf, paper_id_from_metadata_id
+from src.application.processing_state import build_processing_state_records
+from src.application.scientific_output_store import (
+    persist_evidence_blocks,
+    persist_structured_blocks,
+    persist_structured_paper,
+    stable_experiment_map_id,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +45,9 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("pdf-intake", "link", "--help"),
         ("pdf-intake", "backfill-links", "--help"),
         ("pdf-processing", "run", "--help"),
+        ("pdf-processing", "json-from-markdown", "--help"),
         ("evidence-extraction", "run", "--help"),
+        ("processing-state", "refresh", "--help"),
         ("data-layout", "create", "--help"),
     ],
 )
@@ -407,3 +416,126 @@ def test_pdf_intake_backfills_existing_artifact_links(tmp_path: Path) -> None:
             "source_pdf_path": str(artifact_pdf),
         }
     ]
+
+
+def test_scientific_output_store_persists_structured_blocks_payload() -> None:
+    class FakeStore:
+        def __init__(self) -> None:
+            self.record: dict[str, object] | None = None
+
+        def upsert_structured_blocks(self, record: dict[str, object]) -> None:
+            self.record = record
+
+    store = FakeStore()
+    block = {
+        "block_id": "block_1",
+        "paper_id": "paper_1",
+        "content_hash": "hash_1",
+        "order": 1,
+        "section_path": ["Results"],
+        "section_type": "results",
+        "content_kind": "paragraph",
+        "text": "Result text.",
+    }
+
+    persist_structured_blocks(store, paper_id="paper_1", blocks=[block], producer_run_id="run_1")
+
+    assert store.record == {
+        "paper_id": "paper_1",
+        "producer_run_id": "run_1",
+        "schema_version": "v1",
+        "blocks": [block],
+    }
+
+
+def test_scientific_output_store_persists_structured_paper_without_source_pdf() -> None:
+    class FakeStore:
+        def __init__(self) -> None:
+            self.record: dict[str, object] | None = None
+
+        def upsert_structured_paper(self, record: dict[str, object]) -> None:
+            self.record = record
+
+    store = FakeStore()
+
+    persist_structured_paper(
+        store,
+        paper_id="paper_1",
+        payload={"source_pdf": "/tmp/paper_1.pdf", "metadata": {}, "sections": [], "blocks": []},
+        producer_run_id="run_1",
+    )
+
+    assert store.record == {
+        "paper_id": "paper_1",
+        "producer_run_id": "run_1",
+        "schema_version": "v1",
+        "payload": {"paper_id": "paper_1", "metadata": {}, "sections": [], "blocks": []},
+    }
+
+
+def test_scientific_output_store_persists_evidence_blocks_payload() -> None:
+    class FakeStore:
+        def __init__(self) -> None:
+            self.record: dict[str, object] | None = None
+
+        def upsert_evidence_blocks(self, record: dict[str, object]) -> None:
+            self.record = record
+
+    store = FakeStore()
+    block = {
+        "block_id": "block_1",
+        "paper_id": "paper_1",
+        "content_hash": "hash_1",
+        "order": 1,
+        "section_path": ["Results"],
+        "section_type": "results",
+        "content_kind": "paragraph",
+        "text": "Result text.",
+    }
+
+    persist_evidence_blocks(store, paper_id="paper_1", blocks=[block], producer_run_id="run_1")
+
+    assert store.record == {
+        "paper_id": "paper_1",
+        "producer_run_id": "run_1",
+        "schema_version": "v1",
+        "blocks": [block],
+    }
+
+
+def test_stable_experiment_map_id_is_deterministic() -> None:
+    payload = {"experiment_scopes": [{"source_block_ids": ["b1", "b2"]}], "unmapped_block_ids": []}
+
+    assert stable_experiment_map_id("paper_1", payload) == stable_experiment_map_id("paper_1", dict(payload))
+
+
+def test_processing_state_scans_data_outputs(tmp_path: Path) -> None:
+    paper_id = "paper_1"
+    pdf = tmp_path / "artifacts" / "pdfs" / f"{paper_id}.pdf"
+    markdown = tmp_path / "artifacts" / "markdown" / f"{paper_id}.md"
+    for path in (pdf, markdown):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    pdf.write_bytes(b"%PDF-1.4\n")
+    markdown.write_text("# Paper\n", encoding="utf-8")
+
+    records = build_processing_state_records(
+        data_dir=tmp_path,
+        postgres_facts={
+            paper_id: {
+                "has_structured_paper": True,
+                "has_structured_blocks": True,
+                "has_evidence_blocks": False,
+                "has_paper_classification": False,
+                "has_experiment_map": False,
+                "has_canonical_evidence": False,
+            }
+        },
+    )
+
+    assert len(records) == 1
+    assert records[0]["paper_id"] == paper_id
+    assert records[0]["has_pdf"] is True
+    assert records[0]["has_markdown"] is True
+    assert records[0]["has_structured_paper"] is True
+    assert records[0]["has_structured_blocks"] is True
+    assert records[0]["next_stage"] == "classification.classify"

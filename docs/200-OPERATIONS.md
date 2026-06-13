@@ -2,7 +2,8 @@
 id: VICTUS-PROCESSING-OPERATIONS
 title: Victus Processing Operations
 status: active
-updated_at: 2026-06-03
+updated_at: 2026-06-13
+version: v1.0.0
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -14,6 +15,8 @@ tags:
 ---
 
 # Operations
+
+These operations describe the `v1.0.0` processing baseline.
 
 ## 1. Operational Overview
 
@@ -80,9 +83,6 @@ More CLI detail: [CLI operations](operations/cli.md).
 
 PDF-processing detail: [PDF processing operations](operations/pdf-processing.md).
 
-Pipeline action observability plan:
-[Pipeline action observability](operations/runbooks/pipeline-action-observability-plan.md).
-
 ## 4. Configuration
 
 Runtime defaults live in `config/*.yaml`. Relative paths resolve from the
@@ -130,12 +130,11 @@ There is no central logging or metrics service in this repository.
 Operational inspection sources:
 
 - CLI stdout/stderr;
-- `data/runtime/03-pdf_processing/processing_status.jsonl`;
-- `data/runtime/03-pdf_processing/{paper_id}/raw_batches/`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`;
-- evidence artifacts under `data/runtime/04-evidence/`.
+- `paper_processing_state` for per-paper progress;
+- `structured_blocks`, `paper_classifications`, `experiment_maps`, and
+  `canonical_evidence` for processed outputs;
+- `data/reports/exports/paper_processing_state.csv` for quick spreadsheet
+  inspection.
 
 ## 6. Failure and Recovery
 

@@ -14,6 +14,7 @@ class LLMRequest:
     messages: list[LLMMessage]
     temperature: float | None = None
     max_tokens: int | None = None
+    timeout_seconds: float | None = None
     response_format: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 

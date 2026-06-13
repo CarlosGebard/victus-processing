@@ -64,6 +64,8 @@ class LiteLLMClient:
             kwargs["temperature"] = request.temperature
         if request.max_tokens is not None:
             kwargs["max_tokens"] = request.max_tokens
+        if request.timeout_seconds is not None:
+            kwargs["timeout"] = request.timeout_seconds
         if request.response_format is not None:
             kwargs["response_format"] = request.response_format
         return kwargs

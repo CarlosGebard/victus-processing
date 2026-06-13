@@ -63,9 +63,9 @@ data/
     experiment_maps.jsonl
     experiment_packets.jsonl
     canonical_evidence.jsonl
-    pipeline_runs.jsonl
-    pipeline_events.jsonl
-    paper_stage_state.jsonl
+    pipeline_runs.jsonl                  # optional legacy observability
+    pipeline_events.jsonl                # optional legacy observability
+    paper_stage_state.jsonl              # optional legacy observability
 
   artifacts/
     intake/
@@ -107,7 +107,7 @@ data/
 
   registry/
     artifact_manifest.jsonl
-    artifact_registry.jsonl
+    artifact_registry.jsonl              # optional legacy observability
     documents.jsonl
     links.jsonl
 

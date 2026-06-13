@@ -44,6 +44,10 @@ Not covered:
 - downstream analytics schemas;
 - prompt text content.
 
+PostgreSQL may store final scientific output records as a secondary query sink.
+The local JSON/JSONL artifacts documented here remain the handoff and audit
+source for the pipeline.
+
 ## 3. Paper PDF Link Records
 
 The canonical manual PDF intake link dataset is:
@@ -167,26 +171,15 @@ experiment mapping or canonical evidence extraction.
 
 ## 5. PDF-Processing Processed and Final Outputs
 
-The normalized processed output is:
-
-```text
-data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
-```
-
-It is produced by merging validated batch outputs and enforcing the
+The normalized processed output is persisted as `structured_blocks` rows in
+PostgreSQL after merging validated batch outputs and enforcing the
 processed-paper contract.
-
-The current compatibility final output is derived from `paper.processed.json`:
-
-```text
-data/runtime/03-pdf_processing/{paper_id}/paper.final.json
-```
 
 The active evidence pipeline consumes trimmed metadata and blocks, not
 top-level `sections`. `sections` may exist in compatibility artifacts for
 legacy consumers, but it is not a downstream localization contract.
 
-Processed and final `blocks` are normalized by the processed-paper contract.
+Persisted StructuredBlock rows are normalized by the processed-paper contract.
 Block field semantics, identity guarantees, and required fields live in
 [StructuredBlock](../fundamental/scientific/structured-block.md).
 
@@ -231,8 +224,9 @@ Processed block repair joins adjacent blocks in the same section when a block
 ends with an obvious incomplete ending (`and`, `of`, `with`, `,`, `;`, `(`) or
 lacks terminal punctuation.
 
-Paper classifier input is built from `paper.processed.json` before evidence
-trimming and is persisted as `paper.classifier_input.json`.
+Paper classifier input is built from `structured_papers.payload` before
+evidence trimming and is persisted as `paper.classifier_input.json`.
+`paper.processed.json` remains a local compatibility artifact.
 
 It excludes whole blocks with these section types:
 
@@ -274,6 +268,9 @@ Evidence trimming outputs only:
 metadata: object
 blocks: list[object]
 ```
+
+For `primary_research` papers, trimmed blocks are persisted as `evidence_blocks`
+for experiment mapping.
 
 It removes top-level `sections`, `section_registry`,
 `updated_section_registry`, `batch_end`, `batch_ends`, `batch_warnings`, and

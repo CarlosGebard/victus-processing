@@ -33,7 +33,6 @@ Outputs:
 
 - `data/testing/{paper_id}/source.pdf`;
 - `data/testing/{paper_id}/paper.md`;
-- `data/testing/{paper_id}/markdown_batches/`;
 - `data/testing/{paper_id}/raw_batches/`;
 - `data/testing/{paper_id}/paper.processed.json`;
 - `data/testing/{paper_id}/paper.final.json`;

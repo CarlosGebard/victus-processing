@@ -11,26 +11,20 @@ live under [Scientific Contracts](../scientific/README.md).
 
 | Contract | Identifier | Status | Purpose |
 |---|---|---|---|
-| [Processing Papers](papers.md) | `victus.processing.papers@v1` | draft | Operational paper registry table |
-| [Pipeline Runs](pipeline-runs.md) | `victus.processing.pipeline_runs@v1` | draft | Complete pipeline execution table |
-| [Stage Runs](stage-runs.md) | `victus.processing.stage_runs@v1` | draft | Per-stage execution and debugging table |
-| [Processing Artifacts](artifacts.md) | `victus.processing.artifacts@v1` | draft | External artifact registry table |
-| [Processing Errors](processing-errors.md) | `victus.processing.processing_errors@v1` | draft | Traceable pipeline error table |
+| [Paper Processing State](../scientific/paper-processing-state.md) | `victus.scientific.paper_processing_state@v1` | active | Current operational dashboard row per paper |
+| [Pipeline Runs](pipeline-runs.md) | `victus.processing.pipeline_runs@v1` | optional | Legacy/optional run observability |
 
 ## Registry Flow
 
 ```text
-papers
-  -> pipeline_runs
-  -> stage_runs
-  -> artifacts
-  -> processing_errors
+data/artifacts inputs
+  -> scientific PostgreSQL tables
+  -> paper_processing_state
 ```
 
-`papers` tracks operational paper state. `pipeline_runs` tracks complete
-executions for a paper. `stage_runs` tracks individual stage execution.
-`artifacts` tracks externally stored produced or consumed objects.
-`processing_errors` tracks failures without overloading stage state.
+`paper_processing_state` tracks current operational state. Scientific output
+tables store processed results. Pipeline run/event tables are optional
+observability and are not required for v1 operation.
 
 ## Boundary
 

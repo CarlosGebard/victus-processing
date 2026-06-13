@@ -2,7 +2,8 @@
 id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
 status: active
-updated_at: 2026-06-03
+updated_at: 2026-06-13
+version: v1.0.0
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-CONTRACTS
@@ -14,6 +15,8 @@ tags:
 ---
 
 # Architecture
+
+This document describes the `v1.0.0` architecture baseline.
 
 ## 1. Architectural Overview
 
@@ -182,8 +185,9 @@ Main artifact movement:
 data/inputs/
   -> data/lake/paper_metadata.jsonl
   -> data/artifacts/pdfs/
-  -> data/runtime/03-pdf_processing/
-  -> data/runtime/04-evidence/
+  -> data/artifacts/markdown/
+  -> PostgreSQL scientific output tables
+  -> PostgreSQL paper_processing_state
 ```
 
 Artifact roles:
@@ -191,10 +195,11 @@ Artifact roles:
 - `data/inputs/`: seed queues, rules, and imports.
 - `data/lake/paper_metadata.jsonl`: canonical pre-PDF metadata state.
 - `data/artifacts/pdfs/`: canonical PDFs ready for processing.
-- `data/runtime/03-pdf_processing/`: Markdown, raw batches, structured block
-  artifacts, and processing status.
-- `data/runtime/04-evidence/`: trimmed block inputs, experiment maps, and
-  canonical evidence artifacts.
+- `data/artifacts/markdown/`: Markdown artifacts ready for structuring.
+- PostgreSQL scientific tables: StructuredBlocks, classifications, experiment
+  maps, and canonical evidence.
+- `paper_processing_state`: operational dashboard state derived from inputs and
+  PostgreSQL outputs.
 
 Detailed path, handoff, configuration, CLI, and schema contracts live in
 [Contracts](300-CONTRACTS.md).

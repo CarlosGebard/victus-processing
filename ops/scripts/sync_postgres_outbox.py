@@ -60,6 +60,27 @@ def _deliver(store: PostgresPipelineRecordStore, record_type: str, payload: dict
     if record_type == "artifact_registry":
         store.upsert_artifact_registry(payload)
         return
+    if record_type == "structured_paper":
+        store.upsert_structured_paper(payload)
+        return
+    if record_type == "structured_blocks":
+        store.upsert_structured_blocks(payload)
+        return
+    if record_type == "evidence_blocks":
+        store.upsert_evidence_blocks(payload)
+        return
+    if record_type == "paper_classification":
+        store.upsert_paper_classification(payload)
+        return
+    if record_type == "experiment_map":
+        store.upsert_experiment_map(payload)
+        return
+    if record_type == "canonical_evidence":
+        store.upsert_canonical_evidence(payload)
+        return
+    if record_type == "paper_processing_state":
+        store.upsert_paper_processing_state(payload)
+        return
     raise ValueError(f"Unsupported outbox record_type: {record_type}")
 
 

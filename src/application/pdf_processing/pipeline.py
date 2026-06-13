@@ -16,6 +16,7 @@ from src.application.pdf_processing.merge import merge_batch_outputs
 from src.application.pdf_processing.models import PdfProcessingConfig
 from src.application.pdf_processing.processed_paper_contract import build_final_paper, enforce_processed_paper_contract
 from src.application.pdf_processing.status import append_processing_status, load_processing_status_index, write_processing_status_index
+from src.application.scientific_output_store import ScientificOutputStore, persist_structured_paper
 
 
 def load_pdf_processing_config() -> PdfProcessingConfig:
@@ -198,6 +199,8 @@ async def run_pdf_processing_async(
     prompt_registry: PromptRegistry | None = None,
     prompt_label: str = "production",
     markdown_batches_dir: Path | None = None,
+    output_store: ScientificOutputStore | None = None,
+    producer_run_id: str | None = None,
 ) -> Path:
     resolved_config = config or load_pdf_processing_config()
     if output_dir is not None:
@@ -221,6 +224,14 @@ async def run_pdf_processing_async(
     processed_output, final_output, legacy_final_output = _final_output_paths(resolved_config.output_dir, pdf_path)
     status_file = resolved_config.output_dir / "processing_status.jsonl"
     if final_output.exists():
+        if processed_output.exists():
+            processed = json.loads(processed_output.read_text(encoding="utf-8"))
+            persist_structured_paper(
+                output_store,
+                paper_id=paper_id,
+                payload=processed,
+                producer_run_id=producer_run_id,
+            )
         append_processing_status(
             status_file,
             paper_id=paper_id,
@@ -232,6 +243,12 @@ async def run_pdf_processing_async(
         resolved_output = _rename_legacy_output(processed_output, legacy_final_output)
         processed = json.loads(resolved_output.read_text(encoding="utf-8"))
         _write_json(final_output, build_final_paper(processed))
+        persist_structured_paper(
+            output_store,
+            paper_id=paper_id,
+            payload=processed,
+            producer_run_id=producer_run_id,
+        )
         append_processing_status(
             status_file,
             paper_id=paper_id,
@@ -358,10 +375,17 @@ async def run_pdf_processing_async(
             source_pdf=pdf_path,
             batches=results,
             config=resolved_config,
+            paper_id=paper_id,
         )
         merged = enforce_processed_paper_contract(merged)
         _write_json(processed_output, merged)
         _write_json(final_output, build_final_paper(merged))
+        persist_structured_paper(
+            output_store,
+            paper_id=paper_id,
+            payload=merged,
+            producer_run_id=producer_run_id,
+        )
         append_processing_status(
             status_file,
             paper_id=paper_id,
@@ -383,6 +407,7 @@ def run_pdf_processing(pdf_path: Path, **kwargs: Any) -> Path:
 async def run_markdown_processing_async(
     markdown_path: Path,
     *,
+    paper_id: str | None = None,
     config: PdfProcessingConfig | None = None,
     output_dir: Path | None = None,
     prompt_first_batch: Path | None = None,
@@ -392,6 +417,8 @@ async def run_markdown_processing_async(
     llm_client: LLMClient | None = None,
     prompt_registry: PromptRegistry | None = None,
     prompt_label: str = "production",
+    output_store: ScientificOutputStore | None = None,
+    producer_run_id: str | None = None,
 ) -> Path:
     resolved_config = config or load_pdf_processing_config()
     if output_dir is not None:
@@ -408,36 +435,57 @@ async def run_markdown_processing_async(
         resolved_config = PdfProcessingConfig(**{**resolved_config.__dict__, "max_batches": max_batches})
 
     markdown_path = markdown_path.expanduser().resolve()
-    if markdown_path.name != "paper.md":
-        raise ValueError("Markdown input must be named paper.md")
-    paper_id = markdown_path.parent.name
-    if not paper_id:
-        raise ValueError("Markdown input must live under a paper id directory")
+    resolved_paper_id = paper_id
+    if resolved_paper_id is None:
+        if markdown_path.name == "paper.md":
+            resolved_paper_id = markdown_path.parent.name
+        else:
+            resolved_paper_id = markdown_path.stem
+    if not resolved_paper_id:
+        raise ValueError("Markdown input requires a paper_id or a filename stem")
 
-    paper_dir = resolved_config.output_dir / paper_id
+    paper_dir = resolved_config.output_dir / resolved_paper_id
     raw_batches_dir = paper_dir / "raw_batches"
-    source_pdf = resolved_config.input_dir / f"{paper_id}.pdf"
+    source_pdf = resolved_config.input_dir / f"{resolved_paper_id}.pdf"
     processed_output = paper_dir / "paper.processed.json"
     final_output = paper_dir / "paper.final.json"
     legacy_final_output = paper_dir / "paper.json"
     status_file = resolved_config.output_dir / "processing_status.jsonl"
     if final_output.exists():
-        append_processing_status(status_file, paper_id=paper_id, status="done")
-        print(f"[SKIP DONE] {paper_id}")
+        if processed_output.exists():
+            processed = json.loads(processed_output.read_text(encoding="utf-8"))
+            persist_structured_paper(
+                output_store,
+                paper_id=resolved_paper_id,
+                payload=processed,
+                producer_run_id=producer_run_id,
+            )
+        append_processing_status(status_file, paper_id=resolved_paper_id, status="done")
+        print(f"[SKIP DONE] {resolved_paper_id}")
         return final_output
     if processed_output.exists() or legacy_final_output.exists():
         resolved_output = _rename_legacy_output(processed_output, legacy_final_output)
         processed = json.loads(resolved_output.read_text(encoding="utf-8"))
         _write_json(final_output, build_final_paper(processed))
-        append_processing_status(status_file, paper_id=paper_id, status="done")
-        print(f"[FINALIZED] {paper_id}")
+        persist_structured_paper(
+            output_store,
+            paper_id=resolved_paper_id,
+            payload=processed,
+            producer_run_id=producer_run_id,
+        )
+        append_processing_status(status_file, paper_id=resolved_paper_id, status="done")
+        print(f"[FINALIZED] {resolved_paper_id}")
         return final_output
 
     status_error_written = False
     try:
-        print(f"[PROCESSING MARKDOWN] {paper_id}")
+        print(f"[PROCESSING MARKDOWN] {resolved_paper_id}")
         markdown = await asyncio.to_thread(markdown_path.read_text, encoding="utf-8")
-        print(f"[MARKDOWN INPUT] {paper_id}: chars={len(markdown)} input={ctx.display_path(markdown_path)}")
+        paper_dir.mkdir(parents=True, exist_ok=True)
+        canonical_markdown = paper_dir / "paper.md"
+        if markdown_path != canonical_markdown:
+            await asyncio.to_thread(canonical_markdown.write_text, markdown, encoding="utf-8")
+        print(f"[MARKDOWN INPUT] {resolved_paper_id}: chars={len(markdown)} input={ctx.display_path(markdown_path)}")
         try:
             batches = build_markdown_batches(
                 markdown,
@@ -446,9 +494,9 @@ async def run_markdown_processing_async(
                 hard_limit_chars=resolved_config.markdown_batch_hard_limit_chars,
             )
         except MarkdownBatchingError as exc:
-            _append_failed_status(status_file, paper_id=paper_id, error="batching_failed", exc=exc)
+            _append_failed_status(status_file, paper_id=resolved_paper_id, error="batching_failed", exc=exc)
             status_error_written = True
-            print(f"[FAILED] {paper_id}: batching_failed: {type(exc).__name__}: {exc}")
+            print(f"[FAILED] {resolved_paper_id}: batching_failed: {type(exc).__name__}: {exc}")
             raise
         if resolved_config.max_batches is not None:
             if resolved_config.max_batches < 1:
@@ -493,7 +541,7 @@ async def run_markdown_processing_async(
                 else resolved_config.max_tokens
             )
             print(
-                f"[MARKDOWN BATCH] {paper_id}: batch={batch.index}/{len(batches)} "
+                f"[MARKDOWN BATCH] {resolved_paper_id}: batch={batch.index}/{len(batches)} "
                 f"chars={len(batch.text)} range={batch.start_char}:{batch.end_char}"
             )
             try:
@@ -502,7 +550,7 @@ async def run_markdown_processing_async(
                     model=effective_model,
                     prompt=prompt,
                     batch=batch,
-                    paper_id=paper_id,
+                    paper_id=resolved_paper_id,
                     prompt_spec=prompt_spec,
                     prompt_label=prompt_label,
                     temperature=prompt_config.get("temperature"),
@@ -516,9 +564,9 @@ async def run_markdown_processing_async(
                     batch_end=batch.end_char,
                     exc=exc,
                 )
-                _append_failed_status(status_file, paper_id=paper_id, error="llm_failed", exc=exc)
+                _append_failed_status(status_file, paper_id=resolved_paper_id, error="llm_failed", exc=exc)
                 status_error_written = True
-                print(f"[FAILED] {paper_id}: llm_failed: {type(exc).__name__}: {exc}")
+                print(f"[FAILED] {resolved_paper_id}: llm_failed: {type(exc).__name__}: {exc}")
                 raise
             _write_json(
                 raw_batches_dir / f"batch_{batch.index:04d}.json",
@@ -530,17 +578,28 @@ async def run_markdown_processing_async(
                 result.get("section_registry") if batch.index == 1 else result.get("updated_section_registry"),
             )
 
-        merged = merge_batch_outputs(source_pdf=source_pdf, batches=results, config=resolved_config)
+        merged = merge_batch_outputs(
+            source_pdf=source_pdf,
+            batches=results,
+            config=resolved_config,
+            paper_id=resolved_paper_id,
+        )
         merged = enforce_processed_paper_contract(merged)
         _write_json(processed_output, merged)
         _write_json(final_output, build_final_paper(merged))
-        append_processing_status(status_file, paper_id=paper_id, status="done")
-        print(f"[DONE] {paper_id}")
+        persist_structured_paper(
+            output_store,
+            paper_id=resolved_paper_id,
+            payload=merged,
+            producer_run_id=producer_run_id,
+        )
+        append_processing_status(status_file, paper_id=resolved_paper_id, status="done")
+        print(f"[DONE] {resolved_paper_id}")
         return final_output
     except Exception as exc:
         if not status_error_written:
-            _append_failed_status(status_file, paper_id=paper_id, error="processing_failed", exc=exc)
-        print(f"[FAILED] {paper_id}: {type(exc).__name__}: {exc}")
+            _append_failed_status(status_file, paper_id=resolved_paper_id, error="processing_failed", exc=exc)
+        print(f"[FAILED] {resolved_paper_id}: {type(exc).__name__}: {exc}")
         raise
 
 

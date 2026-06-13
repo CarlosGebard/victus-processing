@@ -203,8 +203,9 @@ identity.
 Downstream artifacts may be regenerated without modifying `Paper`.
 
 `paper.md`, `paper.processed.json`, and `paper.final.json` are operational
-pipeline artifacts. They may implement or carry `StructuredBlock` data, but they
-are not canonical scientific contracts.
+pipeline artifacts. `structured_papers.payload` is the persisted processed-paper
+handoff; `evidence_blocks` are the post-classification blocks used by evidence
+mapping. These artifacts are not canonical `Paper` identity contracts.
 
 Pipeline, parser, model, and prompt versions belong in a separate provenance
 contract such as `ProcessingProvenance` or `ExtractionRun`, not in `Paper`.

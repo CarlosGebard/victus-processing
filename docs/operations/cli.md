@@ -69,9 +69,19 @@ Use `--limit` while testing or debugging:
 
 ```bash
 uv run victus-processing pdf-processing markdown --limit 1
+uv run victus-processing pdf-processing json-from-markdown --markdown data/artifacts/markdown/{paper_id}.md
+uv run victus-processing pdf-processing json-from-markdown --input-dir data/artifacts/markdown --shuffle --limit 5
 uv run victus-processing pdf-processing run --limit 1
 uv run victus-processing evidence-extraction run --limit 1
+uv run victus-processing processing-state refresh
 uv run victus-processing testing-pipeline run --limit 1
+```
+
+Refresh the paper processing dashboard from `data/artifacts` inputs and
+PostgreSQL output tables:
+
+```bash
+uv run victus-processing processing-state refresh --csv data/reports/exports/paper_processing_state.csv
 ```
 
 ## Pipeline Runbooks
@@ -96,6 +106,14 @@ Useful forms:
 ```bash
 uv run victus-infisical-env export --env dev --path / --output .env
 uv run victus-infisical-env run --env dev --path / -- victus-processing pdf-processing run --limit 1
+```
+
+## PostgreSQL Export
+
+Export final scientific PostgreSQL tables to CSV and Parquet:
+
+```bash
+uv run victus-postgres-export --output-dir data/reports/exports/postgres
 ```
 
 ## Validation

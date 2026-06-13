@@ -2,6 +2,8 @@
 
 Local paper-processing pipeline for the Victus ecosystem.
 
+Current release baseline: `v1.0.0` (completed 2026-06-13).
+
 This repository turns scientific-paper inputs into metadata, linked PDF artifacts,
 structured PDF-processing artifacts, and canonical evidence outputs. It owns the local
 processing workflow and the `data/` artifact layout used between stages.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 
 from src.workspace import config as ctx
@@ -10,15 +11,15 @@ from src.workspace.data_layout import create_data_layout
 from src.application.bibliography_export import generate_bib_flow
 from src.application.metadata_extraction import seed_dois
 from src.application.pdf_intake import backfill_links_from_existing_artifacts, link_manual_pdf
+from src.application.processing_state import refresh_processing_state
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
 from src.application.pdf_processing.pipeline import (
     load_pdf_processing_config,
     run_markdown_processing,
     run_pdf_processing,
     run_pdf_processing_dir,
-    write_markdown_batch_debug_for_markdown,
 )
-from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_dir
+from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_db, run_pdf_evidence_dir
 from src.application.testing_pipeline.artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
 from src.infrastructure.llm.factory import build_llm_client
 from src.infrastructure.prompts.factory import build_prompt_registry
@@ -267,6 +268,7 @@ def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
         "llm_client": build_llm_client(),
         "prompt_registry": build_prompt_registry(),
         "prompt_label": ctx.PROMPT_LABEL,
+        "output_store": _pipeline_record_store(),
     }
     if args.markdown:
         output_path = run_markdown_processing(_resolved(args.markdown), **common_kwargs)
@@ -278,6 +280,46 @@ def cmd_pdf_processing_run(args: argparse.Namespace) -> None:
         return
     outputs = run_pdf_processing_dir(_resolved(args.input_dir), limit=args.limit, workers=args.workers, **common_kwargs)
     print(f"[OK] PDF processing outputs: {len(outputs)}")
+    for output_path in outputs:
+        print(f"- {ctx.display_path(output_path)}")
+
+
+def cmd_pdf_processing_json_from_markdown(args: argparse.Namespace) -> None:
+    if args.markdown and args.input_dir:
+        raise SystemExit("ERROR: use --markdown or --input-dir, not both.")
+    common_kwargs = {
+        "output_dir": _optional_resolved(args.output_dir),
+        "prompt_first_batch": _optional_resolved(args.prompt_first_batch),
+        "prompt_continuation_batch": _optional_resolved(args.prompt_continuation_batch),
+        "max_batches": args.max_batches,
+        "llm_client": build_llm_client(),
+        "prompt_registry": build_prompt_registry(),
+        "prompt_label": ctx.PROMPT_LABEL,
+        "output_store": _pipeline_record_store(),
+    }
+    if args.markdown:
+        output_path = run_markdown_processing(
+            _resolved(args.markdown),
+            paper_id=args.paper_id,
+            **common_kwargs,
+        )
+        print(f"[OK] Markdown JSON output: {ctx.display_path(output_path)}")
+        return
+
+    input_dir = _resolved(args.input_dir)
+    markdown_paths = sorted(input_dir.glob("*.md"))
+    if args.shuffle:
+        rng = random.Random(args.seed)
+        rng.shuffle(markdown_paths)
+    if args.limit is not None:
+        if args.limit < 1:
+            raise SystemExit("ERROR: --limit must be >= 1.")
+        markdown_paths = markdown_paths[: args.limit]
+
+    outputs = []
+    for markdown_path in markdown_paths:
+        outputs.append(run_markdown_processing(markdown_path, **common_kwargs))
+    print(f"[OK] Markdown JSON outputs: {len(outputs)}")
     for output_path in outputs:
         print(f"- {ctx.display_path(output_path)}")
 
@@ -298,6 +340,7 @@ def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
 
 
 def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
+    output_store = _pipeline_record_store()
     common_kwargs = {
         "output_dir": _optional_resolved(args.output_dir),
         "model": args.model,
@@ -305,7 +348,21 @@ def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
         "llm_client": build_llm_client(),
         "prompt_registry": build_prompt_registry(),
         "prompt_label": ctx.PROMPT_LABEL,
+        "output_store": output_store,
     }
+    if args.from_db:
+        if output_store is None:
+            raise SystemExit("ERROR: --from-db requires VICTUS_PIPELINE_POSTGRES_ENABLED=true.")
+        outputs = run_pdf_evidence_db(
+            store=output_store,
+            paper_id=args.paper_id,
+            limit=args.limit,
+            **{key: value for key, value in common_kwargs.items() if key != "output_store"},
+        )
+        print(f"[OK] Evidence outputs from DB: {len(outputs)}")
+        for output_path in outputs:
+            print(f"- {ctx.display_path(output_path)}")
+        return
     if args.input.is_file():
         output_path = run_pdf_evidence(_resolved(args.input), **common_kwargs)
         print(f"[OK] Evidence output: {ctx.display_path(output_path)}")
@@ -348,6 +405,7 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
             "llm_client": llm_client,
             "prompt_registry": prompt_registry,
             "prompt_label": ctx.PROMPT_LABEL,
+            "output_store": _pipeline_record_store(),
         }
         if args.reuse_markdown:
             markdown_path = copy_testing_markdown(
@@ -362,14 +420,7 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
             final_output = run_pdf_processing(
                 pdf_path,
                 **common_processing_kwargs,
-                markdown_batches_dir=paper_dir / "markdown_batches",
             )
-        markdown_batch_outputs = write_markdown_batch_debug_for_markdown(
-            paper_dir / "paper.md",
-            paper_dir / "markdown_batches",
-            max_batches=args.max_batches,
-        )
-        print(f"[TESTING MARKDOWN BATCHES] {paper_id}: {len(markdown_batch_outputs)}")
         processed_output = paper_dir / "paper.processed.json"
         evidence_input = processed_output if processed_output.exists() else final_output
         evidence_output = run_pdf_evidence(
@@ -380,6 +431,7 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
             llm_client=llm_client,
             prompt_registry=prompt_registry,
             prompt_label=ctx.PROMPT_LABEL,
+            output_store=_pipeline_record_store(),
         )
         print(f"[TESTING DONE] {paper_id}: {ctx.display_path(evidence_output)}")
 
@@ -389,6 +441,31 @@ def cmd_data_layout_create(args: argparse.Namespace) -> None:
     print("Data layout dry-run" if args.dry_run else "Data layout ensured")
     for directory in created_dirs:
         print(f"- {ctx.display_path(directory)}")
+
+
+def cmd_processing_state_refresh(args: argparse.Namespace) -> None:
+    try:
+        records = refresh_processing_state(
+            data_dir=_resolved(args.data_dir),
+            store=_pipeline_record_store(),
+            csv_output=_optional_resolved(args.csv),
+            pipeline_version=args.pipeline_version,
+            config_hash=args.config_hash,
+        )
+    except Exception as exc:
+        if type(exc).__name__ == "UndefinedTable":
+            raise SystemExit(
+                "ERROR: faltan tablas PostgreSQL. Aplica las migraciones en orden:\n"
+                "  psql \"$DATABASE_URL\" -f ops/sql/001_pipeline_runs_events.sql\n"
+                "  psql \"$DATABASE_URL\" -f ops/sql/002_scientific_outputs.sql\n"
+                "  psql \"$DATABASE_URL\" -f ops/sql/003_paper_processing_state.sql\n"
+                "  psql \"$DATABASE_URL\" -f ops/sql/004_structured_paper_evidence_blocks.sql"
+            ) from exc
+        raise
+    print("Paper processing state refreshed")
+    print(f"- papers: {len(records)}")
+    if args.csv:
+        print(f"- csv:    {ctx.display_path(_resolved(args.csv))}")
 
 
 def _add_metadata_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -632,14 +709,77 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     )
     run_parser.set_defaults(handler=cmd_pdf_processing_run)
 
+    json_from_markdown_parser = _add_parser(
+        pdf_processing_subparsers,
+        "json-from-markdown",
+        help="Convierte un Markdown artifact a paper.processed.json y paper.final.json",
+        description=(
+            "Procesa un Markdown existente con el flujo LLM de estructuracion. "
+            "Acepta un Markdown puntual o todos los .md de data/artifacts/markdown."
+        ),
+    )
+    json_from_markdown_parser.add_argument("--markdown", type=Path, default=None, help="Markdown fuente puntual")
+    json_from_markdown_parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=ctx.DATA_ARTIFACTS_MARKDOWN_DIR,
+        help=f"Directorio de Markdown artifacts (default: {ctx.display_path(ctx.DATA_ARTIFACTS_MARKDOWN_DIR)})",
+    )
+    json_from_markdown_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cantidad maxima de Markdown files a procesar desde --input-dir",
+    )
+    json_from_markdown_parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="Procesa los Markdown de --input-dir en orden aleatorio",
+    )
+    json_from_markdown_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed opcional para reproducir el orden aleatorio de --shuffle",
+    )
+    json_from_markdown_parser.add_argument(
+        "--paper-id",
+        default=None,
+        help="Paper id explicito. Si se omite, usa el stem del Markdown o el directorio padre de paper.md.",
+    )
+    json_from_markdown_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help=f"Directorio de salida estructurada (default: {ctx.display_path(defaults.output_dir)})",
+    )
+    json_from_markdown_parser.add_argument(
+        "--prompt-first-batch",
+        type=Path,
+        default=None,
+        help="Prompt alternativo para primer batch",
+    )
+    json_from_markdown_parser.add_argument(
+        "--prompt-continuation-batch",
+        type=Path,
+        default=None,
+        help="Prompt alternativo para batches de continuacion",
+    )
+    json_from_markdown_parser.add_argument(
+        "--max-batches",
+        type=int,
+        default=None,
+        help="Cantidad maxima de batches Markdown a procesar",
+    )
+    json_from_markdown_parser.set_defaults(handler=cmd_pdf_processing_json_from_markdown)
+
     markdown_parser = _add_parser(
         pdf_processing_subparsers,
         "markdown",
         help="Convierte los PDFs artifact a paper.md usando solo Docling",
         description=(
             "Convierte PDFs a Markdown con Docling sin ejecutar batching ni LLM. "
-            "Por defecto lee data/artifacts/pdfs y escribe "
-            "data/runtime/03-pdf_processing/<paper_id>/paper.md."
+            "Por defecto lee data/artifacts/pdfs y escribe en el output_dir configurado."
         ),
     )
     markdown_parser.add_argument(
@@ -725,6 +865,16 @@ def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argpar
         type=int,
         default=None,
         help="Cantidad maxima de papers a procesar cuando --input es directorio",
+    )
+    run_parser.add_argument(
+        "--from-db",
+        action="store_true",
+        help="Consume structured_papers desde PostgreSQL en vez de paper.processed.json",
+    )
+    run_parser.add_argument(
+        "--paper-id",
+        default=None,
+        help="Paper puntual para --from-db",
     )
     run_parser.add_argument("--model", default=None, help="Modelo LLM alternativo para evidence")
     run_parser.add_argument(
@@ -840,6 +990,41 @@ def _add_data_layout_group(subparsers: argparse._SubParsersAction[argparse.Argum
     )
     data_layout_create_parser.set_defaults(handler=cmd_data_layout_create)
 
+
+def _add_processing_state_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    processing_state_parser = _add_parser(
+        subparsers,
+        "processing-state",
+        help="Actualiza estado operacional por paper desde data/",
+    )
+    processing_state_subparsers = _command_subparsers(processing_state_parser, "processing_state_command")
+
+    refresh_parser = _add_parser(
+        processing_state_subparsers,
+        "refresh",
+        help="Escanea data/ y actualiza paper_processing_state",
+        description=(
+            "Deriva el estado actual por paper desde PDFs/Markdown en data/artifacts "
+            "y las tablas PostgreSQL de outputs procesados."
+        ),
+    )
+    refresh_parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=ctx.DATA_DIR,
+        help=f"Directorio data a escanear (default: {ctx.display_path(ctx.DATA_DIR)})",
+    )
+    refresh_parser.add_argument(
+        "--csv",
+        type=Path,
+        default=ctx.DATA_REPORTS_EXPORTS_DIR / "paper_processing_state.csv",
+        help="CSV local de inspeccion rapida.",
+    )
+    refresh_parser.add_argument("--pipeline-version", default="v1")
+    refresh_parser.add_argument("--config-hash", default=None)
+    refresh_parser.set_defaults(handler=cmd_processing_state_refresh)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=CLI_DESCRIPTION,
@@ -853,6 +1038,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_pdf_processing_group(subparsers)
     _add_evidence_extraction_group(subparsers)
     _add_testing_pipeline_group(subparsers)
+    _add_processing_state_group(subparsers)
     _add_data_layout_group(subparsers)
 
     return parser

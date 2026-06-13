@@ -1,8 +1,8 @@
 ---
-id: VICTUS-POSTGRES-PIPELINE-RECORDS-RUNBOOK
-title: PostgreSQL Pipeline Records Runbook
-status: draft
-updated_at: 2026-06-10
+id: VICTUS-POSTGRES-SCIENTIFIC-STATE-RUNBOOK
+title: PostgreSQL Scientific State Runbook
+status: source-of-truth
+updated_at: 2026-06-13
 related_components:
   - src.infrastructure.postgres.pipeline_store
 related_docs:
@@ -10,24 +10,32 @@ related_docs:
 tags:
   - operations
   - postgres
-  - pipeline-runs
-  - pipeline-events
+  - processing-state
+  - scientific-outputs
 ---
 
-# PostgreSQL Pipeline Records
+# PostgreSQL Scientific State
 
-This runbook covers the v1 PostgreSQL integration scope only:
+This runbook covers the v1 PostgreSQL integration scope. The active operational
+tables are:
+
+- `paper_processing_state`
+- `structured_papers`
+- `evidence_blocks`
+- `structured_blocks`
+- `paper_classifications`
+- `experiment_maps`
+- `canonical_evidence`
+
+Legacy/optional observability tables may still exist:
 
 - `pipeline_runs`
 - `pipeline_events`
 - `paper_stage_states`
 - `artifact_registry`
 
-JSONL artifacts and object payloads are out of scope for this integration path.
-They are expected to move through S3/Seaweed-backed storage later.
-
-Local JSONL remains the first durable write. PostgreSQL is a secondary query
-sink and must be synchronized through a local outbox when enabled.
+PostgreSQL is the active query/export sink for scientific outputs and
+`paper_processing_state`.
 
 ## Setup
 
@@ -35,6 +43,9 @@ Apply the v1 schema:
 
 ```bash
 psql "$DATABASE_URL" -f ops/sql/001_pipeline_runs_events.sql
+psql "$DATABASE_URL" -f ops/sql/002_scientific_outputs.sql
+psql "$DATABASE_URL" -f ops/sql/003_paper_processing_state.sql
+psql "$DATABASE_URL" -f ops/sql/004_structured_paper_evidence_blocks.sql
 ```
 
 `DATABASE_URL` should be injected through the normal secret path, preferably
@@ -42,13 +53,16 @@ Infisical for real environments.
 
 ## Validation
 
-Confirm the tables exist:
+Confirm the active tables exist:
 
 ```bash
-psql "$DATABASE_URL" -c '\d pipeline_runs'
-psql "$DATABASE_URL" -c '\d pipeline_events'
-psql "$DATABASE_URL" -c '\d paper_stage_states'
-psql "$DATABASE_URL" -c '\d artifact_registry'
+psql "$DATABASE_URL" -c '\d paper_processing_state'
+psql "$DATABASE_URL" -c '\d structured_papers'
+psql "$DATABASE_URL" -c '\d evidence_blocks'
+psql "$DATABASE_URL" -c '\d structured_blocks'
+psql "$DATABASE_URL" -c '\d paper_classifications'
+psql "$DATABASE_URL" -c '\d experiment_maps'
+psql "$DATABASE_URL" -c '\d canonical_evidence'
 ```
 
 Run the maintained smoke validation:
@@ -59,24 +73,20 @@ uv run pytest tests/test_cli_smoke.py -q
 
 ## Local Outbox
 
-When PostgreSQL dual-write is enabled, failed deliveries must be retained in:
+When PostgreSQL writes fail, failed deliveries must be retained in:
 
 ```text
 data/runtime/outbox/postgres_pipeline_records.jsonl
 ```
 
 Outbox records must be compact and idempotent. They may reference local payloads
-such as `data/lake/pipeline_events.jsonl#evt_...`, but they must not embed
-large payloads.
+but they must not embed large payloads.
 
 Delivery rules:
 
-- write local JSONL first;
 - append or keep an outbox record before retrying PostgreSQL;
-- mark delivery only after PostgreSQL confirms;
 - retry by `idempotency_key`;
-- upsert `pipeline_runs` by `run_id`;
-- insert or dedupe `pipeline_events` by `event_id` or `idempotency_key`.
+- upsert scientific outputs by their canonical ids or paper/run key.
 
 The replay command is:
 
@@ -84,16 +94,39 @@ The replay command is:
 uv run python -m ops.scripts.sync_postgres_outbox
 ```
 
+## Table Exports
+
+Export scientific output tables to CSV and Parquet:
+
+```bash
+uv run victus-postgres-export --output-dir data/reports/exports/postgres
+```
+
+Equivalent module form:
+
+```bash
+uv run python -m ops.scripts.export_postgres_tables --format csv --format parquet
+```
+
+By default this exports:
+
+- `paper_processing_state`
+- `structured_blocks`
+- `paper_classifications`
+- `experiment_maps`
+- `canonical_evidence`
+
+Use repeated `--table` flags to export a subset or include orchestration tables.
+
 ## Boundaries
 
-PostgreSQL v1 stores orchestration records only. It does not store:
+PostgreSQL v1 stores final scientific output records and paper processing state.
+It does not store:
 
 - PDFs;
 - Markdown;
 - raw LLM responses;
-- JSONL lake payloads;
-- canonical evidence payload files;
-- artifact payloads.
+- raw batch artifacts.
 
-Large payloads must remain outside `pipeline_events`; events should reference
-paths or artifact ids when available.
+Large payloads must remain in artifacts or scientific output rows designed for
+that payload.

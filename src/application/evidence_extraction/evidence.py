@@ -10,6 +10,14 @@ from src.workspace import config as ctx
 from src.application.evidence_extraction.llm_evidence import classify_paper, extract_canonical_evidence, map_experiment_scopes
 from src.application.ports.llm import LLMClient
 from src.application.ports.prompt_registry import PromptRegistry, PromptSpec
+from src.application.scientific_output_store import (
+    ScientificOutputStore,
+    persist_canonical_evidence,
+    persist_evidence_blocks,
+    persist_experiment_map,
+    persist_paper_classification,
+    stable_experiment_map_id,
+)
 from src.infrastructure.prompts.compile import compile_template
 
 
@@ -87,6 +95,7 @@ class EvidenceProcessingConfig:
     prompt_paper_classifier: Path
     prompt_results_scope_mapper: Path
     prompt_canonical_evidence_extractor: Path
+    request_timeout_seconds: float
 
 
 def load_evidence_processing_config() -> EvidenceProcessingConfig:
@@ -106,6 +115,7 @@ def load_evidence_processing_config() -> EvidenceProcessingConfig:
             cfg.get("prompt_canonical_evidence_extractor"),
             ctx.ROOT_DIR / "src/prompts/evidence_extraction/canonical_evidence_extractor.md",
         ),
+        request_timeout_seconds=float(cfg.get("request_timeout_seconds", 120)),
     )
 
 
@@ -378,12 +388,17 @@ async def run_pdf_evidence_async(
     llm_client: LLMClient | None = None,
     prompt_registry: PromptRegistry | None = None,
     prompt_label: str = "production",
+    output_store: ScientificOutputStore | None = None,
+    producer_run_id: str | None = None,
 ) -> Path:
     resolved_config = load_evidence_processing_config()
     output_root = output_dir.expanduser().resolve() if output_dir is not None else resolved_config.output_dir
     source_path = input_path.expanduser().resolve()
-    source_payload = _read_json(source_path)
-    paper_id = _paper_id_from_path_or_payload(source_path, source_payload)
+    file_payload = _read_json(source_path) if source_path.exists() else {}
+    paper_id = _paper_id_from_path_or_payload(source_path, file_payload)
+    source_payload = _structured_paper_from_store(output_store, paper_id) or file_payload
+    if not source_payload:
+        raise FileNotFoundError(f"Structured paper not found in DB or filesystem: {input_path}")
     paper_output_dir = output_root / paper_id
     classifier_input_output = paper_output_dir / "paper.classifier_input.json"
     classification_output = paper_output_dir / "paper.classification.json"
@@ -421,9 +436,16 @@ async def run_pdf_evidence_async(
         prompt_label=prompt_label,
         temperature=classifier_config.get("temperature"),
         max_tokens=classifier_config.get("max_tokens"),
+        timeout_seconds=float(classifier_config.get("request_timeout_seconds") or resolved_config.request_timeout_seconds),
     )
     classification = validate_paper_classification(classification_raw)
     _write_json(classification_output, classification)
+    persist_paper_classification(
+        output_store,
+        paper_id=paper_id,
+        classification=classification,
+        producer_run_id=producer_run_id,
+    )
     if classification["paper_family"] != "primary_research":
         skipped = {
             "paper_id": paper_id,
@@ -438,7 +460,14 @@ async def run_pdf_evidence_async(
     trimmed = build_trimmed_paper(source_payload, paper_id=paper_id)
     validate_trimmed_paper(trimmed)
     _write_json(trimmed_output, trimmed)
-    block_ids = {str(block["block_id"]) for block in trimmed["blocks"]}
+    persist_evidence_blocks(
+        output_store,
+        paper_id=paper_id,
+        blocks=trimmed["blocks"],
+        producer_run_id=producer_run_id,
+    )
+    evidence_blocks = _evidence_blocks_from_store(output_store, paper_id) or trimmed["blocks"]
+    block_ids = {str(block["block_id"]) for block in evidence_blocks}
 
     experiment_prompt, experiment_spec = _load_prompt(
         prompt_registry,
@@ -451,16 +480,28 @@ async def run_pdf_evidence_async(
         llm_client,
         model=str(experiment_config.get("model") or effective_model),
         prompt=compile_template(experiment_prompt, {}),
-        blocks=trimmed["blocks"],
+        blocks=evidence_blocks,
         paper_id=paper_id,
         prompt_spec=experiment_spec,
         prompt_label=prompt_label,
         temperature=experiment_config.get("temperature"),
         max_tokens=experiment_config.get("max_tokens"),
+        timeout_seconds=float(experiment_config.get("request_timeout_seconds") or resolved_config.request_timeout_seconds),
     )
     experiment_map = validate_experiment_map(experiment_map_raw, block_ids=block_ids)
+    experiment_map = {
+        **experiment_map,
+        "paper_id": paper_id,
+        "experiment_map_id": stable_experiment_map_id(paper_id, experiment_map),
+    }
     _write_json(experiment_map_output, experiment_map)
-    experiment_packets = build_experiment_packets(trimmed, experiment_map)
+    persist_experiment_map(
+        output_store,
+        paper_id=paper_id,
+        experiment_map=experiment_map,
+        producer_run_id=producer_run_id,
+    )
+    experiment_packets = build_experiment_packets({"metadata": trimmed["metadata"], "blocks": evidence_blocks}, experiment_map)
     _write_json(experiment_packets_output, {"experiment_packets": experiment_packets})
 
     canonical_prompt, canonical_spec = _load_prompt(
@@ -483,17 +524,46 @@ async def run_pdf_evidence_async(
             prompt_label=prompt_label,
             temperature=canonical_config.get("temperature"),
             max_tokens=canonical_config.get("max_tokens"),
+            timeout_seconds=float(canonical_config.get("request_timeout_seconds") or resolved_config.request_timeout_seconds),
         )
         packet_canonical = validate_canonical_evidence(canonical_raw, block_ids=packet_block_ids)
         canonical["canonical_evidence"].extend(packet_canonical["canonical_evidence"])
         canonical["unextracted_packet_items"].extend(packet_canonical["unextracted_packet_items"])
     validate_canonical_evidence(canonical, block_ids=block_ids)
     _write_json(canonical_output, canonical)
+    persist_canonical_evidence(
+        output_store,
+        paper_id=paper_id,
+        canonical=canonical,
+        experiment_map_id=experiment_map.get("experiment_map_id"),
+        producer_run_id=producer_run_id,
+    )
     return canonical_output
 
 
 def run_pdf_evidence(input_path: Path, **kwargs: Any) -> Path:
     return asyncio.run(run_pdf_evidence_async(input_path, **kwargs))
+
+
+async def run_pdf_evidence_db_async(
+    *,
+    store: ScientificOutputStore,
+    paper_id: str | None = None,
+    limit: int | None = None,
+    **kwargs: Any,
+) -> list[Path]:
+    if paper_id:
+        paper_ids = [paper_id]
+    else:
+        paper_ids = store.fetch_structured_paper_ids(limit=limit)
+    outputs = []
+    for current_paper_id in paper_ids:
+        outputs.append(await run_pdf_evidence_async(Path(current_paper_id), output_store=store, **kwargs))
+    return outputs
+
+
+def run_pdf_evidence_db(*, store: ScientificOutputStore, **kwargs: Any) -> list[Path]:
+    return asyncio.run(run_pdf_evidence_db_async(store=store, **kwargs))
 
 
 async def run_pdf_evidence_dir_async(
@@ -575,6 +645,9 @@ def _paper_id_from_path_or_payload(path: Path, payload: dict[str, Any]) -> str:
 
 
 def _paper_id_from_payload(payload: dict[str, Any]) -> str:
+    paper_id = str(payload.get("paper_id") or "").strip()
+    if paper_id:
+        return paper_id
     source_pdf = str(payload.get("source_pdf") or "").strip()
     if source_pdf:
         return Path(source_pdf).stem
@@ -582,3 +655,18 @@ def _paper_id_from_payload(payload: dict[str, Any]) -> str:
         if isinstance(block, dict) and str(block.get("paper_id") or "").strip():
             return str(block["paper_id"])
     return "paper"
+
+
+def _structured_paper_from_store(store: ScientificOutputStore | None, paper_id: str) -> dict[str, Any] | None:
+    if store is None:
+        return None
+    payload = store.fetch_structured_paper(paper_id)
+    if payload is None:
+        return None
+    return {**payload, "paper_id": str(payload.get("paper_id") or paper_id)}
+
+
+def _evidence_blocks_from_store(store: ScientificOutputStore | None, paper_id: str) -> list[dict[str, Any]]:
+    if store is None:
+        return []
+    return store.fetch_evidence_blocks(paper_id)

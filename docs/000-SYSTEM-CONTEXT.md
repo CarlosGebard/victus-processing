@@ -2,10 +2,16 @@
 id: VICTUS-PROCESSING-SYSTEM-CONTEXT
 title: Victus Processing System Context
 status: active
-updated_at: 2026-06-03
+updated_at: 2026-06-13
+version: v1.0.0
 ---
 
 # System Context
+
+`v1.0.0` is the first complete Victus Processing baseline. It includes the
+Markdown-to-structured-paper flow, PostgreSQL-backed scientific outputs,
+paper classification, evidence-ready blocks, experiment maps, canonical
+evidence, and paper processing state.
 
 ## 1. Purpose
 

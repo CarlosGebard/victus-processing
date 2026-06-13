@@ -18,3 +18,4 @@ evidence:
   prompt_paper_classifier: "src/prompts/evidence_extraction/paper_classifier.md"
   prompt_results_scope_mapper: "src/prompts/evidence_extraction/results_scope_mapper.md"
   prompt_canonical_evidence_extractor: "src/prompts/evidence_extraction/canonical_evidence_extractor.md"
+  request_timeout_seconds: 120

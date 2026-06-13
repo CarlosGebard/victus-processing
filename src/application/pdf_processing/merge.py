@@ -37,6 +37,7 @@ def merge_batch_outputs(
     source_pdf: Path,
     batches: list[dict[str, Any]],
     config: PdfProcessingConfig,
+    paper_id: str | None = None,
 ) -> dict[str, Any]:
     metadata = dict(DEFAULT_METADATA)
     if batches and isinstance(batches[0].get("metadata"), dict):
@@ -93,8 +94,9 @@ def merge_batch_outputs(
 
     sections = _sections_from_registry(section_registry) if section_registry else _sections_from_blocks(blocks)
 
+    resolved_paper_id = paper_id or source_pdf.stem
     return {
-        "source_pdf": str(source_pdf),
+        "paper_id": resolved_paper_id,
         "metadata": metadata,
         "sections": sections,
         "section_registry": section_registry,

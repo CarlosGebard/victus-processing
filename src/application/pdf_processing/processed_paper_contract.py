@@ -166,6 +166,9 @@ def _normalize_text_for_hash(value: Any) -> str:
 
 
 def _source_id(payload: dict[str, Any]) -> str:
+    paper_id = str(payload.get("paper_id") or "").strip()
+    if paper_id:
+        return _slugify(paper_id) or "paper"
     source_pdf = str(payload.get("source_pdf") or "paper")
     stem = source_pdf.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     return _slugify(stem) or "paper"

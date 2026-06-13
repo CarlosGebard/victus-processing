@@ -64,6 +64,7 @@ async def map_experiment_scopes(
     prompt_label: str = "production",
     temperature: float | None = None,
     max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
@@ -72,6 +73,7 @@ async def map_experiment_scopes(
             messages=build_experiment_scope_messages(prompt, blocks),
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
             response_format={"type": "json_object"},
             metadata={
                 "paper_id": paper_id,
@@ -97,6 +99,7 @@ async def classify_paper(
     prompt_label: str = "production",
     temperature: float | None = None,
     max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
@@ -105,6 +108,7 @@ async def classify_paper(
             messages=build_paper_classifier_messages(prompt, metadata=metadata, blocks=blocks),
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
             response_format={"type": "json_object"},
             metadata={
                 "paper_id": paper_id,
@@ -129,6 +133,7 @@ async def extract_canonical_evidence(
     prompt_label: str = "production",
     temperature: float | None = None,
     max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     response = await client.acomplete(
         LLMRequest(
@@ -140,6 +145,7 @@ async def extract_canonical_evidence(
             ),
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
             response_format={"type": "json_object"},
             metadata={
                 "paper_id": paper_id,

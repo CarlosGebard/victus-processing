@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-PDF-PROCESSING-OPERATIONS
 title: Victus Processing PDF Processing Operations
 status: source-of-truth
-updated_at: 2026-06-05
+updated_at: 2026-06-13
 tags:
   - operations
   - pdf-processing
@@ -11,15 +11,14 @@ tags:
 
 # PDF Processing Operations
 
-PDF processing converts canonical PDF artifacts into Markdown and structured
-block JSON.
-Evidence extraction and testing are separate public pipeline interfaces.
+PDF processing converts canonical PDF or Markdown artifacts into structured
+blocks persisted in PostgreSQL.
 
 Runtime sequence:
 
 ```text
-PDF -> Docling Markdown -> Markdown batches -> LLM JSON -> merged block JSON
-  -> processed-paper contract enforcement -> paper.processed.json
+PDF/Markdown artifact -> Markdown batches -> LLM JSON -> merged block JSON
+  -> processed-paper contract enforcement -> structured_blocks
 ```
 
 Run all available PDF artifacts:
@@ -47,14 +46,27 @@ Run Markdown-only conversion:
 uv run victus-processing pdf-processing markdown --skip-existing
 ```
 
+Process an existing Markdown artifact into structured JSON:
+
+```bash
+uv run victus-processing pdf-processing json-from-markdown --markdown data/artifacts/markdown/{paper_id}.md
+```
+
+Process a random subset of existing Markdown artifacts:
+
+```bash
+uv run victus-processing pdf-processing json-from-markdown --input-dir data/artifacts/markdown --shuffle --limit 5
+```
+
 Next stages:
 
-- [Evidence extraction](pipelines/evidence-extraction.md)
-- [Testing pipeline](pipelines/testing-pipeline.md)
+- [Evidence extraction](pipeline/evidence-extraction.md)
+- [Testing pipeline](pipeline/testing-pipeline.md)
 
 Operational inputs:
 
 - PDF artifacts under `data/artifacts/pdfs/`;
+- Markdown artifacts under `data/artifacts/markdown/`;
 - prompts under `src/prompts/`;
 - runtime defaults in `config/pdf_processing.yaml`;
 - LiteLLM provider credentials and routing configuration.
@@ -113,35 +125,31 @@ Prompt and batch-continuity behavior:
 
 Final block behavior:
 
-- `paper.final.json` blocks preserve the
+- StructuredBlock rows in PostgreSQL preserve the
   [StructuredBlock Contract](../contracts/fundamental/scientific/structured-block.md).
-- Evidence trimming keeps only methods, results, discussion, and conclusion.
-- The evidence-stage handoff contains only `metadata-extraction` and `blocks`.
 - Blocks are the unit of downstream information and localization.
+- `paper_processing_state` should show `last_successful_stage=pdf.process`
+  and `next_stage=classification.classify` after successful Markdown-to-JSON
+  processing.
 
 Operational outputs:
 
-- `data/runtime/03-pdf_processing/{paper_id}/paper.md`;
-- `data/runtime/03-pdf_processing/{paper_id}/raw_batches/`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.processed.json`;
-- `data/runtime/03-pdf_processing/{paper_id}/paper.final.json`;
-- `data/runtime/03-pdf_processing/processing_status.jsonl`.
+- `structured_blocks` PostgreSQL rows;
+- `paper_processing_state` PostgreSQL row update after refresh;
+- optional local CSV dashboard at `data/reports/exports/paper_processing_state.csv`.
 
 LLM behavior:
 
 - provider credentials, routing, retries, fallbacks, and quota behavior are
   handled by LiteLLM outside the application pipeline.
 
-Testing notes:
+Processing state refresh:
 
-- `data/testing/e2e_prompt_current/` contains the latest four-paper run using
-  the current prompts and default batching.
-- `data/testing/e2e_contract_batch_10k_12k_20k/` contains a comparison run using
-  target 10000, soft limit 12000, and hard limit 20000.
-- Test runs exclude the `01aadd...` paper by convention for this audit set.
-- successful partial outputs are preserved by paper directory.
+```bash
+uv run victus-processing processing-state refresh --csv data/reports/exports/paper_processing_state.csv
+```
 
 Related: [Operations](../200-OPERATIONS.md),
 [Data Layout Contract](../contracts/local/data-layout.md),
-[Evidence extraction](pipelines/evidence-extraction.md),
-[Testing pipeline](pipelines/testing-pipeline.md).
+[Evidence extraction](pipeline/evidence-extraction.md),
+[Testing pipeline](pipeline/testing-pipeline.md).

@@ -52,6 +52,8 @@ Not covered:
 - Stage handoff paths are repository-relative unless explicitly configured
   otherwise.
 - Model-mediated stages retain enough local output for inspection after a run.
+- When enabled, PostgreSQL is a secondary query sink for final scientific
+  outputs; local files remain the stage handoff and audit source.
 
 ## 4. Handoff Map
 
@@ -62,13 +64,12 @@ data/inputs/seeds/*.jsonl or --doi
   -> manual PDFs under data/artifacts/intake/pdfs/
   -> data/lake/paper_pdf_links.jsonl
   -> data/artifacts/pdfs/{paper_id}.pdf
-  -> data/runtime/03-pdf_processing/{paper_id}/paper.md
-  -> data/runtime/03-pdf_processing/{paper_id}/raw_batches/*.json
-  -> data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
-  -> data/runtime/03-pdf_processing/{paper_id}/paper.final.json
-  -> data/runtime/04-evidence/{paper_id}/trimmed.json
-  -> data/runtime/04-evidence/{paper_id}/experiment_map.json
-  -> data/runtime/04-evidence/{paper_id}/canonical_evidence.json
+  -> data/artifacts/markdown/{paper_id}.md
+  -> structured_blocks
+  -> paper_classifications
+  -> experiment_maps
+  -> canonical_evidence
+  -> paper_processing_state
 ```
 
 ## 5. Stage Contracts
@@ -106,25 +107,20 @@ data/inputs/seeds/*.jsonl or --doi
 
 - Inputs are PDF artifacts, Markdown prompts, an injected LLM client, and
   `pdf_processing` config.
-- Outputs are `paper.md`, raw LLM batch JSON, `paper.processed.json`,
-  `paper.final.json`, and status JSONL.
+- Outputs are `structured_papers` rows in PostgreSQL with the full processed
+  paper payload.
 - `paper.md` is generated with Docling and may be reused unless forced.
-- Raw batch files must be written before final merge so partial model output can
-  be inspected.
+- Raw batch debug files are optional and must not be used as handoff state.
 - `section_registry`, `updated_section_registry`, and `batch_end` are internal
   batch-continuity artifacts only. They must not be treated as downstream
   scientific localization contracts.
-- Final success requires a merged structured JSON file, processed-paper contract
-  enforcement, trimmed block handoff, and a done status.
-- Final downstream localization is through block identifiers and block fields.
-- Final `paper.final.json` blocks must preserve the
-  [StructuredBlock](../fundamental/scientific/structured-block.md) contract and
-  should be treated as a compatibility name until the evidence artifact names
-  are implemented.
+- Final success requires processed-paper contract enforcement and successful
+  structured-paper persistence.
+- `structured_blocks` is not the PDF-processing stage gate.
 
 ### Paper Classification
 
-- Inputs are structured paper metadata and blocks.
+- Inputs are `structured_papers.payload` metadata and blocks.
 - Output is `paper.classifier_input.json` plus `paper.classification.json`.
 - Classifier input removes whole blocks by `section_type`; it does not rewrite,
   summarize, split, merge, or interpret block text.
@@ -135,6 +131,8 @@ data/inputs/seeds/*.jsonl or --doi
 - Evidence extraction continues only for `paper_family: primary_research`.
 - Non-primary papers write `evidence_skipped.json` and must not call experiment
   mapping or canonical evidence extraction.
+- After successful validation and local write, PaperClassification may be
+  upserted into PostgreSQL for query/export consumption.
 
 ### Trimming
 
@@ -163,6 +161,8 @@ data/inputs/seeds/*.jsonl or --doi
 - The mapper output only requires `source_block_ids` per scope; optional scope
   metadata may be preserved for compatibility but must not be required by
   downstream schema consumers.
+- After successful validation and local write, ExperimentMap may be upserted
+  into PostgreSQL for query/export consumption.
 
 ### Experiment Packet Construction
 
@@ -185,6 +185,8 @@ data/inputs/seeds/*.jsonl or --doi
 - The final `canonical_evidence.json` aggregates validated canonical outputs
   from all packets.
 - Evidence validation must happen before writing a successful output file.
+- After successful validation and local write, CanonicalEvidence may be upserted
+  into PostgreSQL for query/export consumption.
 
 ## 6. Failure Expectations
 

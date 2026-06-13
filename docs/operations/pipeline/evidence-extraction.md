@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-PIPELINE-EVIDENCE-EXTRACTION
 title: Evidence Extraction Pipeline
 status: source-of-truth
-updated_at: 2026-06-06
+updated_at: 2026-06-13
 tags:
   - operations
   - pipeline
@@ -11,32 +11,28 @@ tags:
 
 # Evidence Extraction
 
-Purpose: classify processed papers, trim evidence-relevant blocks, map
-experiment scopes, build packets, and extract canonical evidence.
+Purpose: classify structured papers, map experiment scopes, build packets, and
+extract canonical evidence from PostgreSQL-backed scientific outputs.
 
 Commands:
 
 ```bash
 uv run victus-processing evidence-extraction run
-uv run victus-processing evidence-extraction run --input data/runtime/03-pdf_processing/{paper_id}/paper.processed.json
 uv run victus-processing evidence-extraction run --skip-existing --limit 20
 ```
 
 Inputs:
 
-- `paper.processed.json` files from `pdf-processing run`;
+- StructuredBlock rows produced by PDF processing;
 - paper classifier, experiment mapper, and canonical evidence prompts;
 - LiteLLM provider credentials and routing configuration.
 
 Outputs:
 
-- `data/runtime/04-evidence/{paper_id}/paper.classifier_input.json`;
-- `data/runtime/04-evidence/{paper_id}/paper.classification.json`;
-- `data/runtime/04-evidence/{paper_id}/evidence_skipped.json` for non-primary papers;
-- `data/runtime/04-evidence/{paper_id}/trimmed.json`;
-- `data/runtime/04-evidence/{paper_id}/experiment_map.json`;
-- `data/runtime/04-evidence/{paper_id}/experiment_packets.json`;
-- `data/runtime/04-evidence/{paper_id}/canonical_evidence.json`.
+- `paper_classifications` PostgreSQL rows;
+- `experiment_maps` PostgreSQL rows for primary-research papers;
+- `canonical_evidence` PostgreSQL rows after extraction;
+- `paper_processing_state` refresh shows the next missing stage.
 
 Validation:
 
