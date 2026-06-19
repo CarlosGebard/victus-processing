@@ -8,7 +8,7 @@ owner: victus-processing
 domain: scientific
 contract_type: domain
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-17
 ---
 
 # CanonicalEvidence Contract Documentation
@@ -49,23 +49,26 @@ Downstream retrieval, ranking, synthesis, and reasoning systems may consume evid
 
 ## 3. Schema
 
-### JSON Schema
+### Persisted JSON Schema
 
 ```json
 {
   "canonical_evidence_id": "string",
   "paper_id": "string",
-  "evidence_type": "between_group_result|within_group_change|association|correlation|dose_response|time_course|subgroup_result|mechanistic_result|null_result|adverse_effect|feasibility_result|descriptive_result|specificity_or_selectivity_result|other|unclear",
+  "study_id": "string",
+  "evidence_type": "between_group_result|within_group_change|dose_response|time_course|feasibility_result|specificity_or_selectivity_result|other|unclear",
+  "evidence_role_in_paper": "primary_result|secondary_result|subgroup_result|sensitivity_result|mechanistic_result|descriptive_result|adverse_event|limitation|method_detail|background_context|unclear",
+  "assertion_type": "causal_effect|comparative_effect|association|no_association|descriptive_comparison|mechanistic_link|methodological|safety_signal|unclear",
   "evidence_text": "string",
   "population": "string|null",
   "subgroup": "string|null",
   "organism": "human|animal|in_vitro|mixed|unclear|null",
-  "intervention_or_exposure": "string|null",
+  "raw_exposure": "string|null",
   "comparator": "string|null",
-  "outcomes": [
+  "raw_outcomes": [
     "string"
   ],
-  "direction": "increase|decrease|no_change|mixed|positive_association|negative_association|not_applicable|unclear",
+  "effect_direction": "increase|decrease|no_effect|mixed|not_applicable|unclear",
   "timepoint": "string|null",
   "duration": "string|null",
   "dose": "string|null",
@@ -92,9 +95,24 @@ Downstream retrieval, ranking, synthesis, and reasoning systems may consume evid
   "experiment_scope_id": "string",
   "source_block_ids": [
     "string"
-  ]
+  ],
+  "canonical_evidence_status": "accepted|needs_review|rejected"
 }
 ```
+
+### Extractor Prompt Output
+
+The LLM extractor must not emit identity or mapper-link fields. It returns the
+same evidence fields except:
+
+* no `canonical_evidence_id`
+* no `paper_id`
+* no `study_id`
+* no `experiment_map_id`
+* no `experiment_scope_id`
+
+The pipeline adds those fields deterministically after validation and before
+writing `canonical_evidence.json`.
 
 ## 4. Field Definitions
 
@@ -102,15 +120,18 @@ Downstream retrieval, ranking, synthesis, and reasoning systems may consume evid
 | -------------------------- | ------------- | ----------------------------------------------------------- |
 | `canonical_evidence_id`    | String        | Canonical Victus identifier for the evidence object.        |
 | `paper_id`                 | String        | Source paper identifier.                                    |
+| `study_id`                 | String        | Study/scope identifier from ExperimentMap.                  |
 | `evidence_type`            | Enum          | Scientific result pattern represented by the evidence.      |
+| `evidence_role_in_paper`   | Enum          | Role of this evidence in the source paper; not a quality score. |
+| `assertion_type`           | Enum          | Kind of scientific assertion represented by the evidence.   |
 | `evidence_text`            | String        | Canonical description of the scientific result.             |
 | `population`               | String|Null   | Population explicitly represented by the evidence.          |
 | `subgroup`                 | String|Null   | Explicit subgroup associated with the evidence.             |
 | `organism`                 | Enum          | Organism or experimental model.                             |
-| `intervention_or_exposure` | String|Null   | Intervention, treatment, exposure, or condition.            |
+| `raw_exposure`             | String|Null   | Raw intervention, exposure, treatment, condition, predictor, group, compound, or protocol term. |
 | `comparator`               | String|Null   | Explicit comparison condition when reported.                |
-| `outcomes`                 | Array[String] | Outcomes directly measured by the evidence.                 |
-| `direction`                | Enum          | Direction of the reported result.                           |
+| `raw_outcomes`             | Array[String] | Raw outcome terms directly measured or reported by the evidence. |
+| `effect_direction`         | Enum          | Direction of the reported result.                           |
 | `timepoint`                | String|Null   | Explicit measurement timepoint.                             |
 | `duration`                 | String|Null   | Explicit intervention or observation duration.              |
 | `dose`                     | String|Null   | Explicit dose or exposure amount.                           |
@@ -120,6 +141,7 @@ Downstream retrieval, ranking, synthesis, and reasoning systems may consume evid
 | `experiment_map_id`        | String        | ExperimentMap identifier used to generate this evidence.    |
 | `experiment_scope_id`      | String        | Experiment scope identifier used to generate this evidence. |
 | `source_block_ids`         | Array[String] | Source StructuredBlocks supporting the evidence.            |
+| `canonical_evidence_status` | Enum         | Extraction status for this paper-level evidence object.     |
 
 ## 5. Responsibilities
 
@@ -134,6 +156,8 @@ CanonicalEvidence must:
 * preserve null findings when reported
 * preserve specificity and selectivity findings when reported
 * preserve scientific context necessary to interpret the result
+* preserve raw exposure and outcome terms for later registry normalization
+* link to the mapped study/scope through `study_id`
 * support retrieval and evidence synthesis workflows
 
 ### Forbidden Responsibilities
@@ -147,6 +171,13 @@ CanonicalEvidence must not store:
 * retrieval scores
 * embeddings
 * ranking metadata
+* evidence ranks
+* aggregation weights
+* exposure registry identifiers
+* outcome registry identifiers
+* EvidenceProjection identifiers
+* GeneralEvidence identifiers
+* family or cluster identifiers
 * user-facing conclusions
 * aggregated scientific consensus
 * claim-level synthesis
@@ -164,10 +195,16 @@ CanonicalEvidence must not merge independent scientific result relations into a 
 * `canonical_evidence_id` must be deterministic for the same source evidence,
   extraction rules, and contract-compatible extraction output.
 * `paper_id` must reference an existing Paper.
+* `study_id` must reference an ExperimentMap scope.
 * `experiment_map_id` must reference an existing ExperimentMap.
 * `experiment_scope_id` must reference an existing ExperimentMap scope.
 * `source_block_ids` must reference existing StructuredBlocks.
 * `evidence_text` must not be empty.
+* `raw_outcomes` must be a list, even when empty.
+* `effect_direction` must use the allowed enum.
+* `evidence_role_in_paper` describes source-paper role, not evidence quality.
+* `assertion_type` describes the scientific assertion type, not rank or
+  consensus.
 * Every evidence object must be traceable to at least one source block.
 * Observations must originate from cited source blocks.
 * Quantitative values must not be invented.
@@ -180,6 +217,9 @@ CanonicalEvidence must not merge independent scientific result relations into a 
 * A CanonicalEvidence is not a table row.
 * A CanonicalEvidence is not an experiment.
 * A CanonicalEvidence is not a study summary.
+* A CanonicalEvidence is not a ranked retrieval document.
+* A CanonicalEvidence is not a normalized exposure/outcome concept.
+* A CanonicalEvidence is not GeneralEvidence.
 * Multiple findings may be extracted from the same source blocks.
 * Independent findings must be represented as separate evidence objects.
 
@@ -220,23 +260,33 @@ CanonicalEvidence versions may be deprecated when replaced by a newer contract v
 
 ### Downstream Contracts
 
-* `Embedding`
-* `Retrieval`
-* `Agent Reasoning`
-* `User Answer`
+* `ExposureRegistry`
+* `OutcomeRegistry`
+* `EvidenceProjection`
+* `GeneralEvidence`
+* RAG export payloads
 
 ### References
 
 * `CanonicalEvidence.paper_id` -> `Paper.paper_id`
+* `CanonicalEvidence.study_id` -> `ExperimentMap.experiment_scopes[].study_id`
 * `CanonicalEvidence.experiment_map_id` -> `ExperimentMap.experiment_map_id`
 * `CanonicalEvidence.experiment_scope_id` -> `ExperimentMap.experiment_scopes[].experiment_scope_id`
 * `CanonicalEvidence.source_block_ids[]` -> `StructuredBlock.block_id`
 
 ## 9. Operational Notes
 
-CanonicalEvidence is the primary scientific knowledge unit used by retrieval and reasoning systems.
+CanonicalEvidence is the extracted paper-level evidence unit used by downstream
+derivation systems.
 
 Evidence objects should remain reusable independently of specific retrieval architectures, ranking systems, vector stores, databases, or agent workflows.
+
+Ranking, exposure/outcome IDs, RAG use, consensus, recommendation status, and
+user-facing conclusions are computed after CanonicalEvidence, primarily in
+EvidenceProjection and GeneralEvidence.
+
+Legacy outputs may map `intervention_or_exposure` to `raw_exposure`, `outcomes`
+to `raw_outcomes`, and `direction` to `effect_direction` during migration.
 
 Multiple CanonicalEvidence objects may originate from the same experiment scope.
 
@@ -244,7 +294,8 @@ A single experiment scope may generate zero, one, or many CanonicalEvidence obje
 
 CanonicalEvidence regeneration must preserve traceability and scientific meaning while allowing extraction quality improvements across contract versions.
 
-Victus-RAG indexes CanonicalEvidence, not Claim.
+Victus downstream RAG should consume derived handoff payloads, not mutate
+CanonicalEvidence.
 
 Pipeline, parser, model, and prompt versions belong in a separate provenance
 contract such as `ProcessingProvenance` or `ExtractionRun`, not in

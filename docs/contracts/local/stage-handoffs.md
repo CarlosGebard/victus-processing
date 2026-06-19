@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-STAGE-HANDOFFS-CONTRACT
 title: Victus Processing Stage Handoffs Contract
 status: source-of-truth
-updated_at: 2026-06-11
+updated_at: 2026-06-17
 related_components:
   - src.application.metadata_extraction
   - src.application.bibliography_export
@@ -69,6 +69,8 @@ data/inputs/seeds/*.jsonl or --doi
   -> paper_classifications
   -> experiment_maps
   -> canonical_evidence
+  -> general_evidence_artifacts.json
+  -> rag_export.json
   -> paper_processing_state
 ```
 
@@ -161,6 +163,9 @@ data/inputs/seeds/*.jsonl or --doi
 - The mapper output only requires `source_block_ids` per scope; optional scope
   metadata may be preserved for compatibility but must not be required by
   downstream schema consumers.
+- The mapper may add `study_id`, `study_design`, and `study_role_in_paper`.
+  These describe methodological scope context only and must not contain
+  extracted findings, rankings, or claims. Uncertain context uses `unclear`.
 - After successful validation and local write, ExperimentMap may be upserted
   into PostgreSQL for query/export consumption.
 
@@ -175,6 +180,8 @@ data/inputs/seeds/*.jsonl or --doi
 - A block may appear in multiple packets when the experiment map includes it in
   multiple scopes.
 - Canonical extraction must not use blocks outside the current packet.
+- Packet construction carries mapper study context forward so CanonicalEvidence
+  can link to `study_id` without asking the extractor to infer identity.
 
 ### Canonical Evidence
 
@@ -187,6 +194,22 @@ data/inputs/seeds/*.jsonl or --doi
 - Evidence validation must happen before writing a successful output file.
 - After successful validation and local write, CanonicalEvidence may be upserted
   into PostgreSQL for query/export consumption.
+- CanonicalEvidence must not contain rank, exposure IDs, outcome IDs,
+  projection IDs, general evidence IDs, consensus, or recommendation fields.
+
+### General Evidence Derivation
+
+- Inputs are validated `canonical_evidence.json` and `experiment_map.json`.
+- Outputs are local JSON handoff artifacts:
+  `general_evidence_artifacts.json` and `rag_export.json`.
+- Exposure and outcome registries are derived from raw canonical evidence terms.
+- EvidenceProjection connects one canonical evidence row to one normalized
+  exposure/outcome pair and assigns deterministic rank and RAG use.
+- GeneralEvidence groups projections by exposure, outcome, organism,
+  population scope, and context identity.
+- Aggregation uses paper/study support units, not raw evidence row counts.
+- This stage prepares payloads only. Vector indexing, retrieval, and RAG serving
+  are owned outside this repository.
 
 ## 6. Failure Expectations
 

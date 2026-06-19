@@ -8,16 +8,7 @@ from src.workspace import runs
 
 
 class PipelineRecordStore(Protocol):
-    def upsert_pipeline_run(self, record: dict[str, Any]) -> None:
-        ...
-
-    def insert_pipeline_event(self, record: dict[str, Any]) -> None:
-        ...
-
-    def upsert_paper_stage_state(self, record: dict[str, Any]) -> None:
-        ...
-
-    def upsert_artifact_registry(self, record: dict[str, Any]) -> None:
+    def upsert_paper_pipeline_state(self, record: dict[str, Any]) -> None:
         ...
 
 
@@ -71,7 +62,6 @@ class PipelineRunContext:
             trace_ref=trace_ref,
             record_store=record_store,
         )
-        context._deliver("pipeline_run", run["run_id"], run, "pipeline_runs")
         return context
 
     @property
@@ -101,7 +91,6 @@ class PipelineRunContext:
 
     def finish(self, *, status: str, summary: dict[str, Any] | None = None) -> dict[str, Any]:
         self.run = runs.finish_pipeline_run(self.run, status=status, summary=summary, lake_dir=self.lake_dir)
-        self._deliver("pipeline_run", self.run_id, self.run, "pipeline_runs")
         return self.run
 
     def fail(self, *, stage: str | None, error: BaseException, paper_id: str | None = None) -> dict[str, Any]:
@@ -115,26 +104,18 @@ class PipelineRunContext:
         )
         return self.finish(status="failed", summary={"error_type": type(error).__name__, "message": str(error)})
 
-    def _deliver(self, record_type: str, record_id: str, record: dict[str, Any], local_file: str) -> None:
+    def _deliver_pipeline_state(self, record: dict[str, Any]) -> None:
         if self.record_store is None:
             return
+        record_id = str(record["pipeline_state_id"])
         try:
-            if record_type == "pipeline_run":
-                self.record_store.upsert_pipeline_run(record)
-            elif record_type == "pipeline_event":
-                self.record_store.insert_pipeline_event(record)
-            elif record_type == "paper_stage_state":
-                self.record_store.upsert_paper_stage_state(record)
-            elif record_type == "artifact_registry":
-                self.record_store.upsert_artifact_registry(record)
-            else:
-                raise ValueError(f"Unsupported record type: {record_type}")
+            self.record_store.upsert_paper_pipeline_state(record)
         except Exception as exc:
             runs.append_postgres_outbox(
-                record_type=record_type,
+                record_type="paper_pipeline_state",
                 record_id=record_id,
-                idempotency_key=str(record.get("idempotency_key") or record_id),
-                payload_ref=f"data/{local_file}#{record_id}",
+                idempotency_key=record_id,
+                payload_ref=f"paper_pipeline_state#{record_id}",
                 payload=record,
                 last_error=str(exc),
                 runtime_dir=_runtime_dir_from_runs_dir(self.runtime_runs_dir),
@@ -147,7 +128,7 @@ class PipelineRunContext:
                 severity="warning",
                 status="warning",
                 message="PostgreSQL dual-write failed; record retained in local outbox",
-                metadata={"record_type": record_type, "record_id": record_id},
+                metadata={"record_type": "paper_pipeline_state", "record_id": record_id},
                 lake_dir=self.lake_dir,
             )
 
@@ -197,7 +178,8 @@ class StageAttempt:
             metadata=metadata,
             lake_dir=self.context.lake_dir,
         )
-        self.context._deliver("pipeline_event", event["event_id"], event, "lake/pipeline_events.jsonl")
+        if self.paper_id and event["event_type"] in {"stage_started", "stage_succeeded", "stage_failed", "skipped"}:
+            self.context._deliver_pipeline_state(self._state_from_event(event))
         return event
 
     def set_state(
@@ -230,7 +212,7 @@ class StageAttempt:
             error_summary=error_summary,
             lake_dir=self.context.lake_dir,
         )
-        self.context._deliver("paper_stage_state", f"{self.paper_id}:{self.stage}", state, "lake/paper_stage_state.jsonl")
+        self.context._deliver_pipeline_state(self._state_from_stage_state(state))
         return state
 
     def register_artifact(
@@ -264,7 +246,7 @@ class StageAttempt:
             metadata=metadata,
             registry_dir=self.context.registry_dir,
         )
-        registry = runs.register_artifact_registry(
+        runs.register_artifact_registry(
             artifact_id=manifest["artifact_id"],
             paper_id=self.paper_id,
             artifact_kind=artifact_type,
@@ -277,8 +259,60 @@ class StageAttempt:
             validation_status="unknown",
             registry_dir=self.context.registry_dir,
         )
-        self.context._deliver("artifact_registry", registry["artifact_id"], registry, "registry/artifact_registry.jsonl")
         return manifest
+
+    def _base_pipeline_state(self) -> dict[str, Any]:
+        return {
+            "pipeline_state_id": self.stage_attempt_id,
+            "paper_id": self.paper_id,
+            "stage": self.stage,
+            "attempt_number": self.attempt_number,
+            "run_id": self.context.run_id,
+            "pipeline_name": self.context.run["pipeline_name"],
+            "pipeline_version": self.context.run["pipeline_version"],
+            "execution_mode": self.context.run["execution_mode"],
+            "input_scope": self.context.run.get("input_scope") or {},
+        }
+
+    def _state_from_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        status = "running" if event["status"] == "started" else event["status"]
+        timestamp = event["timestamp"]
+        terminal = status in {"succeeded", "failed", "skipped"}
+        return {
+            **self._base_pipeline_state(),
+            "status": status,
+            "artifact_path": event.get("artifact_path"),
+            "error_code": event.get("event_type") if status == "failed" else None,
+            "error_message": event.get("message") if status == "failed" else None,
+            "metadata": {
+                **(event.get("metadata") or {}),
+                "event_id": event["event_id"],
+                "event_type": event["event_type"],
+                "severity": event["severity"],
+                "message": event["message"],
+            },
+            "started_at": timestamp if status == "running" else None,
+            "ended_at": timestamp if terminal else None,
+            "updated_at": timestamp,
+        }
+
+    def _state_from_stage_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        status = str(state["status"])
+        timestamp = state["updated_at"]
+        return {
+            **self._base_pipeline_state(),
+            "status": status,
+            "artifact_path": state.get("artifact_path"),
+            "error_code": "stage_failed" if status == "failed" else None,
+            "error_message": state.get("error_summary"),
+            "metadata": {
+                "last_event_id": state.get("last_event_id"),
+                "primary_artifact_id": state.get("primary_artifact_id"),
+            },
+            "started_at": timestamp if status == "running" else None,
+            "ended_at": timestamp if status in {"succeeded", "failed", "skipped", "blocked"} else None,
+            "updated_at": timestamp,
+        }
 
 
 def _runtime_dir_from_runs_dir(runtime_runs_dir: Path | None) -> Path | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -12,11 +13,12 @@ from ops.scripts.data.refresh_paper_metadata_from_dois import refresh_paper_meta
 from src.application.bibliography_export import generate_bib_from_paper_metadata_jsonl
 from src.application.metadata_extraction import citation_exploration
 from src.application.metadata_extraction.paper_selector import PaperCandidate, classify_papers_with_llm
+from src.application.metadata_to_pdf import fetch_unpaywall_pdfs
 from src.application.ports.llm import LLMRequest, LLMResponse
+from src.application.pdf_processing.batching import MarkdownBatchingError
 from src.application.pdf_intake import link_manual_pdf, paper_id_from_metadata_id
 from src.application.processing_state import build_processing_state_records
 from src.application.scientific_output_store import (
-    persist_evidence_blocks,
     persist_structured_blocks,
     persist_structured_paper,
     stable_experiment_map_id,
@@ -47,6 +49,7 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("pdf-processing", "run", "--help"),
         ("pdf-processing", "json-from-markdown", "--help"),
         ("evidence-extraction", "run", "--help"),
+        ("evidence-derivation", "build", "--help"),
         ("processing-state", "refresh", "--help"),
         ("data-layout", "create", "--help"),
     ],
@@ -56,6 +59,57 @@ def test_cli_core_help_commands_are_available(args: tuple[str, ...]) -> None:
 
     assert result.returncode == 0
     assert "usage:" in result.stdout
+
+
+def test_json_from_markdown_input_dir_skips_oversized_batches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_dir = tmp_path / "markdown"
+    input_dir.mkdir()
+    oversized = input_dir / "oversized.md"
+    valid = input_dir / "valid.md"
+    oversized.write_text("| huge |\n", encoding="utf-8")
+    valid.write_text("# valid\n", encoding="utf-8")
+    output = tmp_path / "out" / "valid" / "paper.final.json"
+    processed_paths = []
+
+    def fake_run_markdown_processing(markdown_path: Path, **_: object) -> Path:
+        processed_paths.append(markdown_path)
+        return output
+
+    def fake_oversized_markdown_error(markdown_path: Path, **_: object) -> MarkdownBatchingError | None:
+        if markdown_path == oversized:
+            return MarkdownBatchingError("Oversized table exceeds hard limit: chars=40001")
+        return None
+
+    monkeypatch.setattr(cli, "run_markdown_processing", fake_run_markdown_processing)
+    monkeypatch.setattr(cli, "_oversized_markdown_error", fake_oversized_markdown_error)
+    monkeypatch.setattr(cli, "build_llm_client", lambda: object())
+    monkeypatch.setattr(cli, "build_prompt_registry", lambda: object())
+    monkeypatch.setattr(cli, "_pipeline_record_store", lambda: None)
+
+    cli.cmd_pdf_processing_json_from_markdown(
+        argparse.Namespace(
+            markdown=None,
+            input_dir=input_dir,
+            output_dir=None,
+            prompt_first_batch=None,
+            prompt_continuation_batch=None,
+            max_batches=None,
+            paper_id=None,
+            shuffle=False,
+            seed=1,
+            limit=None,
+        )
+    )
+
+    captured = capsys.readouterr()
+    assert "[SKIP OVERSIZED] oversized: Oversized table exceeds hard limit: chars=40001" in captured.out
+    assert "[OK] Markdown JSON outputs: 1" in captured.out
+    assert str(output) in captured.out
+    assert processed_paths == [valid]
 
 
 def test_metadata_seed_dois_reads_paper_metadata_jsonl(tmp_path: Path) -> None:
@@ -214,6 +268,73 @@ def test_metadata_from_doi_writes_directly_to_lake_jsonl(tmp_path: Path, monkeyp
     assert len(rows) == 1
     assert rows[0]["metadata_id"] == "meta:s2:s2paper123"
     assert rows[0]["source_metadata"]["doi"] == "10.1000/example"
+
+
+def test_unpaywall_retry_missing_pdf_url_rechecks_only_empty_statuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_file = tmp_path / "papers_missing_pdfs.jsonl"
+    status_file = tmp_path / "unpaywall_pdf_status.jsonl"
+    links_file = tmp_path / "paper_pdf_links.jsonl"
+    staging_dir = tmp_path / "staging"
+    artifact_dir = tmp_path / "artifacts"
+
+    input_file.write_text(
+        "\n".join(
+            [
+                json.dumps({"metadata_id": "meta:has-url", "paper_id": "paper_has_url", "doi": "10.1/has-url"}),
+                json.dumps({"metadata_id": "meta:no-url", "paper_id": "paper_no_url", "doi": "10.1/no-url"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    status_file.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "metadata_id": "meta:has-url",
+                        "paper_id": "paper_has_url",
+                        "pdf_url": "https://example.test/existing.pdf",
+                    }
+                ),
+                json.dumps({"metadata_id": "meta:no-url", "paper_id": "paper_no_url", "pdf_url": None}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    requested_urls: list[str] = []
+
+    def fake_get_json(url: str, *, timeout: float) -> dict[str, object]:
+        requested_urls.append(url)
+        return {
+            "is_oa": True,
+            "oa_status": "gold",
+            "best_oa_location": {"url_for_pdf": "https://example.test/found.pdf"},
+        }
+
+    monkeypatch.setattr(fetch_unpaywall_pdfs, "_get_json", fake_get_json)
+    monkeypatch.setattr(fetch_unpaywall_pdfs, "_download_pdf", lambda url, *, timeout: b"%PDF-1.4\n")
+
+    counts = fetch_unpaywall_pdfs.fetch_unpaywall_pdfs(
+        input_file=input_file,
+        output_dir=staging_dir,
+        artifact_dir=artifact_dir,
+        links_file=links_file,
+        oa_status_file=status_file,
+        email="operator@example.com",
+        retry_missing_pdf_url=True,
+    )
+
+    assert counts["checked"] == 1
+    assert counts["skipped"] == 1
+    assert requested_urls == ["https://api.unpaywall.org/v2/10.1/no-url?email=operator@example.com"]
+    records = [json.loads(line) for line in status_file.read_text(encoding="utf-8").splitlines()]
+    assert records[-1]["metadata_id"] == "meta:no-url"
+    assert records[-1]["pdf_url"] == "https://example.test/found.pdf"
 
 
 def test_metadata_save_paper_writes_directly_to_lake_jsonl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -473,36 +594,6 @@ def test_scientific_output_store_persists_structured_paper_without_source_pdf() 
     }
 
 
-def test_scientific_output_store_persists_evidence_blocks_payload() -> None:
-    class FakeStore:
-        def __init__(self) -> None:
-            self.record: dict[str, object] | None = None
-
-        def upsert_evidence_blocks(self, record: dict[str, object]) -> None:
-            self.record = record
-
-    store = FakeStore()
-    block = {
-        "block_id": "block_1",
-        "paper_id": "paper_1",
-        "content_hash": "hash_1",
-        "order": 1,
-        "section_path": ["Results"],
-        "section_type": "results",
-        "content_kind": "paragraph",
-        "text": "Result text.",
-    }
-
-    persist_evidence_blocks(store, paper_id="paper_1", blocks=[block], producer_run_id="run_1")
-
-    assert store.record == {
-        "paper_id": "paper_1",
-        "producer_run_id": "run_1",
-        "schema_version": "v1",
-        "blocks": [block],
-    }
-
-
 def test_stable_experiment_map_id_is_deterministic() -> None:
     payload = {"experiment_scopes": [{"source_block_ids": ["b1", "b2"]}], "unmapped_block_ids": []}
 
@@ -524,7 +615,6 @@ def test_processing_state_scans_data_outputs(tmp_path: Path) -> None:
             paper_id: {
                 "has_structured_paper": True,
                 "has_structured_blocks": True,
-                "has_evidence_blocks": False,
                 "has_paper_classification": False,
                 "has_experiment_map": False,
                 "has_canonical_evidence": False,

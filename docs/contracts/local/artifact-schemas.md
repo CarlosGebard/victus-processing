@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-ARTIFACT-SCHEMAS-CONTRACT
 title: Victus Processing Artifact Schemas Contract
 status: source-of-truth
-updated_at: 2026-06-11
+updated_at: 2026-06-19
 related_components:
   - src.application.bibliography_export
   - src.application.pdf_intake
@@ -228,6 +228,59 @@ Paper classifier input is built from `structured_papers.payload` before
 evidence trimming and is persisted as `paper.classifier_input.json`.
 `paper.processed.json` remains a local compatibility artifact.
 
+## 6. Evidence Derivation Outputs
+
+Per-paper evidence extraction writes durable local JSON artifacts under:
+
+```text
+data/runtime/04-evidence/{paper_id}/
+```
+
+The derived evidence bundle is:
+
+```text
+general_evidence_artifacts.json
+```
+
+It contains:
+
+```text
+exposure_registry: list[object]
+outcome_registry: list[object]
+evidence_projections: list[object]
+general_evidence: list[object]
+rag_export: object
+```
+
+`EvidenceProjection` is derived from one `CanonicalEvidence` record plus one
+normalized exposure/outcome pair. It may fan out one canonical record into
+multiple projections when multiple outcomes are present.
+
+`GeneralEvidence` is derived from grouped projections. Its support counts are
+based primarily on paper/study support units, not raw evidence row count.
+
+The RAG handoff artifact is:
+
+```text
+rag_export.json
+```
+
+It contains document payloads only:
+
+```text
+documents: list[object]
+documents[].document_type: "general_evidence" | "evidence_support"
+documents[].id: string
+documents[].payload: object
+```
+
+`general_evidence` documents are emitted only for active, recommendable,
+non-insufficient GeneralEvidence. `evidence_support` documents are emitted only
+for accepted A/B projections with primary or supporting RAG use.
+
+This artifact is a downstream handoff. It is not a vector index, retrieval
+store, Qdrant collection, or serving API.
+
 It excludes whole blocks with these section types:
 
 ```text
@@ -269,8 +322,8 @@ metadata: object
 blocks: list[object]
 ```
 
-For `primary_research` papers, trimmed blocks are persisted as `evidence_blocks`
-for experiment mapping.
+For `primary_research` papers, trimmed blocks are derived in memory for
+experiment mapping. They are not a durable PostgreSQL artifact.
 
 It removes top-level `sections`, `section_registry`,
 `updated_section_registry`, `batch_end`, `batch_ends`, `batch_warnings`, and

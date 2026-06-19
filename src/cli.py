@@ -13,6 +13,7 @@ from src.application.metadata_extraction import seed_dois
 from src.application.pdf_intake import backfill_links_from_existing_artifacts, link_manual_pdf
 from src.application.processing_state import refresh_processing_state
 from src.application.pdf_processing.markdown import pdf_dir_to_markdown
+from src.application.pdf_processing.batching import MarkdownBatchingError, build_markdown_batches
 from src.application.pdf_processing.pipeline import (
     load_pdf_processing_config,
     run_markdown_processing,
@@ -20,6 +21,7 @@ from src.application.pdf_processing.pipeline import (
     run_pdf_processing_dir,
 )
 from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_db, run_pdf_evidence_dir
+from src.application.evidence_derivation.stage import build_evidence_derivation_dir, build_evidence_derivation_for_paper
 from src.application.testing_pipeline.artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
 from src.infrastructure.llm.factory import build_llm_client
 from src.infrastructure.prompts.factory import build_prompt_registry
@@ -317,11 +319,34 @@ def cmd_pdf_processing_json_from_markdown(args: argparse.Namespace) -> None:
         markdown_paths = markdown_paths[: args.limit]
 
     outputs = []
+    output_dir = common_kwargs["output_dir"]
     for markdown_path in markdown_paths:
+        oversized_error = _oversized_markdown_error(markdown_path, output_dir=output_dir)
+        if oversized_error is not None:
+            print(f"[SKIP OVERSIZED] {markdown_path.stem}: {oversized_error}")
+            continue
         outputs.append(run_markdown_processing(markdown_path, **common_kwargs))
     print(f"[OK] Markdown JSON outputs: {len(outputs)}")
     for output_path in outputs:
         print(f"- {ctx.display_path(output_path)}")
+
+
+def _oversized_markdown_error(markdown_path: Path, *, output_dir: Path | None) -> MarkdownBatchingError | None:
+    config = load_pdf_processing_config()
+    if output_dir is not None:
+        config = type(config)(**{**config.__dict__, "output_dir": output_dir})
+    try:
+        build_markdown_batches(
+            markdown_path.read_text(encoding="utf-8"),
+            min_chars=config.markdown_batch_chars,
+            soft_limit_chars=config.markdown_batch_soft_limit_chars,
+            hard_limit_chars=config.markdown_batch_hard_limit_chars,
+        )
+    except MarkdownBatchingError as exc:
+        if str(exc).startswith("Oversized table exceeds hard limit:"):
+            return exc
+        raise
+    return None
 
 
 def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
@@ -374,6 +399,35 @@ def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
         **common_kwargs,
     )
     print(f"[OK] Evidence outputs: {len(outputs)}")
+    for output_path in outputs:
+        print(f"- {ctx.display_path(output_path)}")
+
+
+def cmd_evidence_derivation_build(args: argparse.Namespace) -> None:
+    llm_client = build_llm_client() if args.llm_conclusions else None
+    prompt_registry = build_prompt_registry() if args.llm_conclusions else None
+    common_kwargs = {
+        "build_id": args.build_id,
+        "llm_client": llm_client,
+        "prompt_registry": prompt_registry,
+        "prompt_label": ctx.PROMPT_LABEL,
+        "model": args.model,
+        "language": args.language,
+    }
+    input_path = _resolved(args.input)
+    if input_path.is_file():
+        if input_path.name != "canonical_evidence.json":
+            raise SystemExit("ERROR: --input file must be canonical_evidence.json")
+        output_path = build_evidence_derivation_for_paper(input_path.parent, **common_kwargs)
+        print(f"[OK] Evidence derivation output: {ctx.display_path(output_path)}")
+        return
+    outputs = build_evidence_derivation_dir(
+        input_path,
+        pattern=args.pattern,
+        limit=args.limit,
+        **common_kwargs,
+    )
+    print(f"[OK] Evidence derivation outputs: {len(outputs)}")
     for output_path in outputs:
         print(f"- {ctx.display_path(output_path)}")
 
@@ -456,10 +510,7 @@ def cmd_processing_state_refresh(args: argparse.Namespace) -> None:
         if type(exc).__name__ == "UndefinedTable":
             raise SystemExit(
                 "ERROR: faltan tablas PostgreSQL. Aplica las migraciones en orden:\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/001_pipeline_runs_events.sql\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/002_scientific_outputs.sql\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/003_paper_processing_state.sql\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/004_structured_paper_evidence_blocks.sql"
+                "  psql \"$DATABASE_URL\" -f ops/sql/005_simplified_postgres_schema.sql"
             ) from exc
         raise
     print("Paper processing state refreshed")
@@ -884,6 +935,50 @@ def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argpar
     )
     run_parser.set_defaults(handler=cmd_pdf_processing_evidence)
 
+
+def _add_evidence_derivation_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    evidence_parser = _add_parser(
+        subparsers,
+        "evidence-derivation",
+        help="Deriva GeneralEvidence y payloads RAG desde CanonicalEvidence.",
+    )
+    evidence_subparsers = _command_subparsers(evidence_parser, "evidence_derivation_command")
+    build_parser = _add_parser(
+        evidence_subparsers,
+        "build",
+        help="Construye artifacts post-canonical desde canonical_evidence.json",
+    )
+    build_parser.add_argument(
+        "--input",
+        type=Path,
+        default=ctx.EVIDENCE_OUTPUT_DIR,
+        help=(
+            "Archivo canonical_evidence.json o directorio de evidencia "
+            f"(default: {ctx.display_path(ctx.EVIDENCE_OUTPUT_DIR)})"
+        ),
+    )
+    build_parser.add_argument(
+        "--pattern",
+        default="*/canonical_evidence.json",
+        help='Patron glob cuando --input es directorio (default: "*/canonical_evidence.json")',
+    )
+    build_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cantidad maxima de papers a procesar cuando --input es directorio",
+    )
+    build_parser.add_argument("--build-id", default=None, help="Identificador opcional del build derivado")
+    build_parser.add_argument(
+        "--llm-conclusions",
+        action="store_true",
+        help="Usa el prompt evidence_derivation/general_evidence para escribir conclusiones",
+    )
+    build_parser.add_argument("--model", default=None, help="Modelo LLM para --llm-conclusions")
+    build_parser.add_argument("--language", choices=["en", "es"], default="en", help="Idioma de conclusiones")
+    build_parser.set_defaults(handler=cmd_evidence_derivation_build)
+
+
 def _add_testing_pipeline_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     defaults = load_pdf_processing_config()
     testing_parser = _add_parser(
@@ -1037,6 +1132,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_pdf_intake_group(subparsers)
     _add_pdf_processing_group(subparsers)
     _add_evidence_extraction_group(subparsers)
+    _add_evidence_derivation_group(subparsers)
     _add_testing_pipeline_group(subparsers)
     _add_processing_state_group(subparsers)
     _add_data_layout_group(subparsers)

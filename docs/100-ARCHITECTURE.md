@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-ARCHITECTURE
 title: Victus Processing Architecture
 status: active
-updated_at: 2026-06-13
+updated_at: 2026-06-19
 version: v1.0.0
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
@@ -187,6 +187,7 @@ data/inputs/
   -> data/artifacts/pdfs/
   -> data/artifacts/markdown/
   -> PostgreSQL scientific output tables
+  -> PostgreSQL paper_pipeline_state
   -> PostgreSQL paper_processing_state
 ```
 
@@ -198,8 +199,10 @@ Artifact roles:
 - `data/artifacts/markdown/`: Markdown artifacts ready for structuring.
 - PostgreSQL scientific tables: StructuredBlocks, classifications, experiment
   maps, and canonical evidence.
+- `paper_pipeline_state`: per-paper, per-stage attempt state written at pipeline
+  lifecycle boundaries.
 - `paper_processing_state`: operational dashboard state derived from inputs and
-  PostgreSQL outputs.
+  PostgreSQL outputs and pipeline state.
 
 Detailed path, handoff, configuration, CLI, and schema contracts live in
 [Contracts](300-CONTRACTS.md).

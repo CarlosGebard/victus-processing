@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-CONTRACTS
 title: Victus Processing Contracts
 status: source-of-truth
-updated_at: 2026-06-11
+updated_at: 2026-06-19
 related_docs:
   - VICTUS-PROCESSING-SYSTEM-CONTEXT
   - VICTUS-PROCESSING-ARCHITECTURE
@@ -28,8 +28,7 @@ Contracts are split by source and responsibility:
 - `docs/contracts/fundamental/`: ecosystem-level contracts synchronized from
   `victus-docs`. These define shared Victus interfaces and preserve the central
   contract repository subdirectory layout.
-- `docs/contracts/local/`: legacy repository-local contracts that have not yet
-  been grouped by domain.
+- `docs/contracts/local/`: repository-specific contracts owned here.
 
 ## Fundamental Contracts
 
@@ -50,9 +49,6 @@ Contracts are split by source and responsibility:
   locations, identities, stage inputs, stage outputs, and failure expectations.
 - [Metadata Extraction](operations/pipeline/metadata-extraction.md): operation, LLM selection
   contract, `paper_metadata.jsonl` schema, and dedupe rules.
-- [Configuration and CLI](contracts/local/configuration-and-cli.md): config
-  loading, environment precedence, CLI command surface, and public command
-  guarantees.
 - [Stage Handoffs](contracts/local/stage-handoffs.md): boundaries between
   metadata, bibliography export, manual PDF intake, PDF processing, trimming,
   experiment mapping, and canonical evidence extraction.
@@ -60,8 +56,10 @@ Contracts are split by source and responsibility:
   shapes consumed or produced by the current pipeline.
 - [Artifact Inventory](contracts/local/artifact-inventory.md): complete artifact
   list with the inputs consumed to create each artifact.
-- [Testing Pipeline](contracts/local/testing-pipeline.md): per-paper testing
-  workspace, Markdown reuse behavior, and testing artifact guarantees.
+- [Paper Pipeline State](contracts/local/paper-pipeline-state.md): PostgreSQL
+  lifecycle state for one paper stage attempt.
+- [Paper Processing State](contracts/fundamental/scientific/paper-processing-state.md): derived
+  PostgreSQL dashboard state by paper.
 
 ## Contract Scope
 
@@ -75,7 +73,7 @@ Contracts cover:
 - compatibility boundaries between processing stages;
 - config and environment resolution that affects paths or models;
 - public CLI command names used by operators and agents;
-- schema-level expectations for current durable artifacts;
+- schema-level expectations for current durable artifacts and PostgreSQL state;
 - experiment map and canonical evidence schema expectations.
 - paper classification gate expectations.
 - testing workspace artifact expectations.
@@ -86,14 +84,13 @@ Contracts do not cover:
 - operational procedures;
 - architecture rationale;
 - external vendor guarantees.
-- downstream analytics schemas outside this repository;
-- deprecated downstream extraction contracts.
+- downstream analytics schemas outside this repository.
 
 ## Status Rule
 
-All documentation with `status: source-of-truth` is authoritative for agents as
-of `updated_at: 2026-06-10`. If code and docs disagree, stop and reconcile the
-contract before making behavior-changing edits.
+Documentation with `status: source-of-truth` is authoritative as of its own
+`updated_at` value. If code and docs disagree, stop and reconcile the contract
+before making behavior-changing edits.
 
 ## Related Documents
 

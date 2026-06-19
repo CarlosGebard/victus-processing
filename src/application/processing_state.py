@@ -39,7 +39,6 @@ CSV_FIELDS = (
     "has_markdown",
     "has_structured_paper",
     "has_structured_blocks",
-    "has_evidence_blocks",
     "has_paper_classification",
     "has_experiment_map",
     "has_canonical_evidence",
@@ -112,11 +111,14 @@ def build_processing_state_records(
             **physical_facts,
             "has_structured_paper": bool(postgres_fact.get("has_structured_paper")),
             "has_structured_blocks": bool(postgres_fact.get("has_structured_blocks")),
-            "has_evidence_blocks": bool(postgres_fact.get("has_evidence_blocks")),
             "has_paper_classification": bool(postgres_fact.get("has_paper_classification")),
             "has_experiment_map": bool(postgres_fact.get("has_experiment_map")),
             "has_canonical_evidence": bool(postgres_fact.get("has_canonical_evidence")),
             "paper_family": postgres_fact.get("paper_family"),
+            "latest_pipeline_stage": postgres_fact.get("latest_pipeline_stage"),
+            "latest_pipeline_status": postgres_fact.get("latest_pipeline_status"),
+            "last_error_code": postgres_fact.get("last_error_code"),
+            "last_error_message": postgres_fact.get("last_error_message"),
         }
         status = _derive_status(facts)
         record = {
@@ -167,6 +169,19 @@ def _derive_status(facts: dict[str, Any]) -> dict[str, Any]:
         return _status("pending", "pdf.markdown", "pdf.markdown", "pdf.available")
     if not facts["has_structured_paper"]:
         return _status("pending", "pdf.process", "pdf.process", "pdf.markdown")
+    if facts.get("latest_pipeline_status") in {"failed", "blocked"}:
+        stage = str(facts.get("latest_pipeline_stage") or "pipeline")
+        blocked = facts["latest_pipeline_status"] == "blocked"
+        return _status(
+            overall_status="blocked" if blocked else "failed",
+            current_stage=stage,
+            next_stage=None if blocked else stage,
+            last_successful_stage=None,
+            is_processable=not blocked,
+            blocked_reason=facts.get("last_error_code") if blocked else None,
+            last_error_code=facts.get("last_error_code"),
+            last_error_message=facts.get("last_error_message"),
+        )
     if not facts["has_paper_classification"]:
         return _status("pending", "classification.classify", "classification.classify", "pdf.process")
     if facts.get("paper_family") != "primary_research":
@@ -178,8 +193,8 @@ def _derive_status(facts: dict[str, Any]) -> dict[str, Any]:
             is_complete=True,
             is_ready_for_export=True,
         )
-    if not facts["has_evidence_blocks"]:
-        return _status("pending", "evidence.trim", "evidence.trim", "classification.classify")
+    if not facts["has_structured_blocks"]:
+        return _status("pending", "pdf.process", "pdf.process", "pdf.markdown")
     if not facts["has_experiment_map"]:
         return _status("pending", "evidence.map", "evidence.map", "classification.classify")
     if not facts["has_canonical_evidence"]:
@@ -204,6 +219,8 @@ def _status(
     is_complete: bool = False,
     is_ready_for_export: bool = False,
     blocked_reason: str | None = None,
+    last_error_code: str | None = None,
+    last_error_message: str | None = None,
 ) -> dict[str, Any]:
     return {
         "overall_status": overall_status,
@@ -214,8 +231,8 @@ def _status(
         "is_complete": is_complete,
         "is_ready_for_export": is_ready_for_export,
         "blocked_reason": blocked_reason,
-        "last_error_code": blocked_reason,
-        "last_error_message": blocked_reason,
+        "last_error_code": last_error_code or blocked_reason,
+        "last_error_message": last_error_message or blocked_reason,
     }
 
 
@@ -226,9 +243,6 @@ def _store_record(record: dict[str, Any]) -> dict[str, Any]:
         "current_stage",
         "last_successful_stage",
         "next_stage",
-        "active_pipeline_run_id",
-        "pipeline_version",
-        "config_hash",
         "is_processable",
         "is_complete",
         "is_ready_for_export",
@@ -240,7 +254,6 @@ def _store_record(record: dict[str, Any]) -> dict[str, Any]:
         "has_markdown",
         "has_structured_paper",
         "has_structured_blocks",
-        "has_evidence_blocks",
         "has_paper_classification",
         "has_experiment_map",
         "has_canonical_evidence",

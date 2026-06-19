@@ -4,13 +4,14 @@ title: ArtifactRegistry
 version: v1
 status: draft
 owner: victus-processing
+updated_at: 2026-06-19
 ---
 
 # ArtifactRegistry Contract Documentation
 
 ## Purpose
 
-`ArtifactRegistry` is the canonical global index of produced artifacts.
+`ArtifactRegistry` is the local index of produced artifacts.
 
 It records where artifacts are stored, which run produced them, which stage they
 belong to, and whether the artifact is valid for downstream use.
@@ -24,12 +25,6 @@ Local durable write:
 
 ```text
 data/registry/artifact_registry.jsonl
-```
-
-PostgreSQL table:
-
-```text
-artifact_registry
 ```
 
 ## Fields
@@ -69,27 +64,10 @@ Initial kinds:
 
 ## Guarantees
 
-- PostgreSQL stores index records only.
 - Artifact content stays in filesystem or object storage.
 - Registry records must not embed PDF, markdown, extracted text, model inputs,
   model outputs, or large evidence payloads.
 - `producer_run_id` links the artifact to `PipelineRun`.
 - `stage` links the artifact to the producing stage.
 
-## PostgreSQL Shape
-
-```sql
-CREATE TABLE IF NOT EXISTS artifact_registry (
-  artifact_id TEXT PRIMARY KEY,
-  paper_id TEXT,
-  artifact_kind TEXT NOT NULL,
-  stage TEXT NOT NULL,
-  artifact_path TEXT NOT NULL,
-  content_hash TEXT,
-  schema_version TEXT,
-  contract_version TEXT,
-  producer_run_id TEXT NOT NULL,
-  validation_status TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
+Artifact registry rows are not persisted to PostgreSQL.

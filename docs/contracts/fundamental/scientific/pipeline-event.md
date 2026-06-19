@@ -8,7 +8,7 @@ owner: victus-processing
 domain: orchestration
 contract_type: orchestration
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-19
 ---
 
 # PipelineEvent Contract Documentation
@@ -183,26 +183,14 @@ Deprecated only by future contract version or event taxonomy migration.
 
 ## 9. Operational Notes
 
-Initial JSONL target:
+Durable JSONL target:
 
 ```text
 data/lake/pipeline_events.jsonl
 ```
 
-Future database target:
-
-```text
-pipeline_events
-```
-
-Recommended indexes:
-
-- `run_id`
-- `paper_id`
-- `process_name`
-- `stage`
-- `event_type`
-- `timestamp`
+PostgreSQL stores lifecycle state in `paper_pipeline_state`; it does not
+duplicate the full local event stream.
 
 ## 10. Versioning
 

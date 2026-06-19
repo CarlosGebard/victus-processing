@@ -20,12 +20,6 @@ class ScientificOutputStore(Protocol):
     def upsert_structured_blocks(self, record: dict[str, Any]) -> None:
         ...
 
-    def upsert_evidence_blocks(self, record: dict[str, Any]) -> None:
-        ...
-
-    def fetch_evidence_blocks(self, paper_id: str) -> list[dict[str, Any]]:
-        ...
-
     def upsert_paper_classification(self, record: dict[str, Any]) -> None:
         ...
 
@@ -70,21 +64,6 @@ def persist_structured_paper(
             "schema_version": "v1",
             "payload": structured_paper,
         },
-    )
-
-
-def persist_evidence_blocks(
-    store: ScientificOutputStore | None,
-    *,
-    paper_id: str,
-    blocks: list[dict[str, Any]],
-    producer_run_id: str | None = None,
-) -> None:
-    _deliver(
-        store,
-        "evidence_blocks",
-        f"evidence_blocks:{paper_id}:{producer_run_id or 'unknown'}",
-        {"paper_id": paper_id, "producer_run_id": producer_run_id, "schema_version": "v1", "blocks": blocks},
     )
 
 
@@ -178,8 +157,6 @@ def _deliver(
             store.upsert_structured_paper(payload)
         elif record_type == "structured_blocks":
             store.upsert_structured_blocks(payload)
-        elif record_type == "evidence_blocks":
-            store.upsert_evidence_blocks(payload)
         elif record_type == "paper_classification":
             store.upsert_paper_classification(payload)
         elif record_type == "experiment_map":

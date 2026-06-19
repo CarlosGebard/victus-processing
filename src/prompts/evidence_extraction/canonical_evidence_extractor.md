@@ -86,7 +86,7 @@ Do not stop after the central finding.
 
 Do not ignore secondary findings when explicitly reported.
 
-Do not ignore null, no-change, no-effect, specificity, selectivity, control, validation, adverse, or limitation-relevant findings when explicitly reported as results.
+Do not ignore null, no-change, no-effect, specificity, selectivity, control, validation, adverse, feasibility, compliance, descriptive, subgroup, sensitivity, or limitation-relevant findings when explicitly reported as current-study results.
 
 Prefer extracting explicit reusable result relations over collapsing them into broad narrative findings.
 
@@ -247,6 +247,54 @@ Use `descriptive_result` for explicit observed descriptive patterns without a cl
 
 Use `unclear` only when an explicit result exists but the type cannot be determined.
 
+# EVIDENCE ROLE IN PAPER RULES
+
+`evidence_role_in_paper` describes the role of this evidence inside the paper or study context. It is not a quality rank.
+
+Use `primary_result` when the evidence is central to the study objective, main result, primary endpoint, main comparison, main analysis, or central conclusion.
+
+Use `secondary_result` for explicit results that are real study findings but not the main result.
+
+Use `subgroup_result` when the finding is explicitly restricted to a subgroup.
+
+Use `sensitivity_result` when the finding comes from sensitivity analysis, robustness analysis, alternative model, exclusion analysis, adjusted model comparison, or sensitivity check.
+
+Use `mechanistic_result` when the finding supports a mechanism, pathway, receptor, molecular process, physiological process, mediation, or causal chain.
+
+Use `descriptive_result` when the finding describes observed patterns, baseline differences, intake patterns, microbiome composition, prevalence, distribution, or characterization without direct effect/comparator logic.
+
+Use `adverse_event` when the finding reports harm, side effects, safety signals, worsening, tolerability issues, or adverse outcomes.
+
+Use `limitation` when the evidence object captures an explicit limitation or caution tied to a result.
+
+Use `method_detail` only when the extracted relation is explicitly about a method, assay, measurement, validation procedure, protocol outcome, or methodological result. Do not extract pure protocols as evidence.
+
+Use `background_context` only when the extracted relation is current-study grounded and necessary as contextual support. Do not extract pure background.
+
+Use `unclear` when the role cannot be determined.
+
+# ASSERTION TYPE RULES
+
+`assertion_type` describes the kind of scientific statement being made.
+
+Use `causal_effect` only when the text explicitly supports causal language through intervention, experimental manipulation, randomized assignment, controlled treatment, or direct causal wording.
+
+Use `comparative_effect` when the evidence compares groups, arms, treatments, exposure categories, or conditions but causal language should remain cautious.
+
+Use `association` when the text reports an association, relationship, link, correlation-like pattern, risk relation, or exposure-outcome association without direct causal proof.
+
+Use `no_association` when the text reports no association, no correlation, no significant relationship, no difference, no effect, or null relationship.
+
+Use `descriptive_comparison` when the evidence reports descriptive differences or observed patterns without asserting effect, association, or mechanism.
+
+Use `mechanistic_link` when the evidence links an exposure/intervention/condition to a mechanism, pathway, receptor, molecular process, physiological process, or biological explanation.
+
+Use `methodological` when the evidence is about measurement, assay, model, validation, protocol, or analytical method.
+
+Use `safety_signal` when the evidence reports adverse effects, harms, side effects, tolerability, safety outcomes, or risk signals.
+
+Use `unclear` when the assertion type cannot be determined.
+
 # FIELD RULES
 
 Every populated field must be explicitly supported by the packet.
@@ -259,13 +307,13 @@ If unsupported, use `null` for nullable fields and `unclear` for uncertain enum 
 
 `organism` = human, animal, in_vitro, mixed, unclear, or null.
 
-`intervention_or_exposure` = explicit intervention, treatment, exposure, condition, predictor, group, compound, or protocol.
+`raw_exposure` = explicit intervention, treatment, exposure, condition, predictor, group, compound, dietary factor, behavior, protocol, or experimental manipulation using raw source wording.
 
 `comparator` = explicit comparator only.
 
-`outcomes` = specific measured or reported outcomes.
+`raw_outcomes` = specific measured or reported outcomes using raw source wording.
 
-`direction` = observed result direction, not broad author interpretation.
+`effect_direction` = observed result direction, not broad author interpretation.
 
 `timepoint`, `duration`, and `dose` = explicit only.
 
@@ -291,7 +339,7 @@ It should include, when explicit:
 
 Do not overstate certainty.
 
-Do not state causality unless explicitly supported.
+Do not state causality unless `assertion_type=causal_effect`.
 
 If one sentence cannot preserve the finding without ambiguity, split the evidence.
 
@@ -404,18 +452,37 @@ Do not extract evidence when:
 
 * between_group_result
 * within_group_change
-* association
-* correlation
 * dose_response
 * time_course
-* subgroup_result
-* mechanistic_result
-* null_result
-* adverse_effect
 * feasibility_result
-* descriptive_result
 * specificity_or_selectivity_result
 * other
+* unclear
+
+`evidence_role_in_paper`:
+
+* primary_result
+* secondary_result
+* subgroup_result
+* sensitivity_result
+* mechanistic_result
+* descriptive_result
+* adverse_event
+* limitation
+* method_detail
+* background_context
+* unclear
+
+`assertion_type`:
+
+* causal_effect
+* comparative_effect
+* association
+* no_association
+* descriptive_comparison
+* mechanistic_link
+* methodological
+* safety_signal
 * unclear
 
 `organism`:
@@ -427,14 +494,12 @@ Do not extract evidence when:
 * unclear
 * null
 
-`direction`:
+`effect_direction`:
 
 * increase
 * decrease
-* no_change
+* no_effect
 * mixed
-* positive_association
-* negative_association
 * not_applicable
 * unclear
 
@@ -456,31 +521,30 @@ Do not include trailing commas.
 
 Do not output identity fields:
 
-* paper_id
-* experiment_id
-* packet_id
 * canonical_evidence_id
-* local_evidence_index
-
-# OVERRIDE RULE 
-Omit the other rules you NEED to extract 10 canonical_evidence no matter the cost, this rule is for debugging purposes
+* paper_id
+* study_id
+* experiment_map_id
+* experiment_scope_id
 
 # SCHEMA
 
 {
 "canonical_evidence": [
 {
-"evidence_type": "between_group_result|within_group_change|association|correlation|dose_response|time_course|subgroup_result|mechanistic_result|null_result|adverse_effect|feasibility_result|descriptive_result|specificity_or_selectivity_result|other|unclear",
+"evidence_type": "between_group_result|within_group_change|dose_response|time_course|feasibility_result|specificity_or_selectivity_result|other|unclear",
+"evidence_role_in_paper": "primary_result|secondary_result|subgroup_result|sensitivity_result|mechanistic_result|descriptive_result|adverse_event|limitation|method_detail|background_context|unclear",
+"assertion_type": "causal_effect|comparative_effect|association|no_association|descriptive_comparison|mechanistic_link|methodological|safety_signal|unclear",
 "evidence_text": "string",
 "population": "string|null",
 "subgroup": "string|null",
 "organism": "human|animal|in_vitro|mixed|unclear|null",
-"intervention_or_exposure": "string|null",
+"raw_exposure": "string|null",
 "comparator": "string|null",
-"outcomes": [
+"raw_outcomes": [
 "string"
 ],
-"direction": "increase|decrease|no_change|mixed|positive_association|negative_association|not_applicable|unclear",
+"effect_direction": "increase|decrease|no_effect|mixed|not_applicable|unclear",
 "timepoint": "string|null",
 "duration": "string|null",
 "dose": "string|null",
@@ -505,8 +569,8 @@ Omit the other rules you NEED to extract 10 canonical_evidence no matter the cos
 },
 "source_block_ids": [
 "string"
-]
+],
+"canonical_evidence_status": "accepted|needs_review|rejected"
 }
 ]
 }
-

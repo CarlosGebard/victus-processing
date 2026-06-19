@@ -22,10 +22,8 @@ DEFAULT_TABLES = (
     "canonical_evidence",
 )
 ALLOWED_TABLES = DEFAULT_TABLES + (
-    "pipeline_runs",
-    "pipeline_events",
-    "paper_stage_states",
-    "artifact_registry",
+    "structured_papers",
+    "paper_pipeline_state",
 )
 
 
@@ -135,9 +133,7 @@ def main() -> int:
         if type(exc).__name__ == "UndefinedTable":
             raise SystemExit(
                 "ERROR: faltan tablas PostgreSQL. Aplica las migraciones en orden:\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/001_pipeline_runs_events.sql\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/002_scientific_outputs.sql\n"
-                "  psql \"$DATABASE_URL\" -f ops/sql/003_paper_processing_state.sql"
+                "  psql \"$DATABASE_URL\" -f ops/sql/005_simplified_postgres_schema.sql"
             ) from exc
         raise
     print("PostgreSQL table export")

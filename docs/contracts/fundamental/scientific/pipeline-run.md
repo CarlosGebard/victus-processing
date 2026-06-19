@@ -8,7 +8,7 @@ owner: victus-processing
 domain: orchestration
 contract_type: orchestration
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-19
 ---
 
 # PipelineRun Contract Documentation
@@ -168,23 +168,14 @@ None.
 
 ## 9. Operational Notes
 
-Initial JSONL target:
+Durable JSONL target:
 
 ```text
 data/lake/pipeline_runs.jsonl
 ```
 
-Future database target:
-
-```text
-pipeline_runs
-```
-
-Recommended primary key:
-
-```text
-run_id
-```
+PostgreSQL stores paper-scoped stage attempts in `paper_pipeline_state`; it does
+not duplicate complete `PipelineRun` records.
 
 ## 10. Versioning
 

@@ -124,5 +124,4 @@ Smoke-test CLI routing after changing command behavior:
 uv run pytest tests/test_cli_smoke.py -q
 ```
 
-Related: [Operations](../200-OPERATIONS.md),
-[Configuration and CLI Contract](../contracts/local/configuration-and-cli.md).
+Related: [Operations](../200-OPERATIONS.md).

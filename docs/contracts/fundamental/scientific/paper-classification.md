@@ -8,7 +8,7 @@ owner: victus-processing
 domain: scientific
 contract_type: domain
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-19
 ---
 
 # PaperClassification Contract Documentation
@@ -189,8 +189,9 @@ evidence_skipped.json
 
 `paper.classification.json` is the current per-paper runtime representation of
 `PaperClassification`. `paper.classifier_input.json` is debug/audit input.
-`evidence_skipped.json` is deprecated as a canonical output; its information
-belongs in `PaperClassification` and `PipelineEvent`.
+`evidence_skipped.json` is a runtime routing output, not a canonical scientific
+artifact. Its durable information belongs in `PaperClassification` and
+`PipelineEvent`.
 
 ## 10. Versioning
 

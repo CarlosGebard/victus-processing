@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from src.workspace import config as ctx
+from src.application.evidence_derivation.general_evidence import build_general_evidence_artifacts
 from src.application.evidence_extraction.llm_evidence import classify_paper, extract_canonical_evidence, map_experiment_scopes
 from src.application.ports.llm import LLMClient
 from src.application.ports.prompt_registry import PromptRegistry, PromptSpec
 from src.application.scientific_output_store import (
     ScientificOutputStore,
     persist_canonical_evidence,
-    persist_evidence_blocks,
     persist_experiment_map,
     persist_paper_classification,
     stable_experiment_map_id,
@@ -51,31 +52,86 @@ EVIDENCE_GENERATION_MODES = {
 EVIDENCE_TYPES = {
     "between_group_result",
     "within_group_change",
-    "association",
-    "correlation",
     "dose_response",
     "time_course",
-    "subgroup_result",
-    "mechanistic_result",
-    "null_result",
-    "adverse_effect",
     "feasibility_result",
-    "descriptive_result",
     "specificity_or_selectivity_result",
     "other",
     "unclear",
+}
+LEGACY_EVIDENCE_TYPE_MAP = {
+    "association": "other",
+    "correlation": "other",
+    "subgroup_result": "other",
+    "mechanistic_result": "other",
+    "null_result": "other",
+    "adverse_effect": "other",
+    "descriptive_result": "other",
 }
 ORGANISMS = {"human", "animal", "in_vitro", "mixed", "unclear", None}
 DIRECTIONS = {
     "increase",
     "decrease",
-    "no_change",
+    "no_effect",
     "mixed",
-    "positive_association",
-    "negative_association",
     "not_applicable",
     "unclear",
 }
+LEGACY_DIRECTION_MAP = {
+    "no_change": "no_effect",
+    "positive_association": "increase",
+    "negative_association": "decrease",
+}
+STUDY_DESIGNS = {
+    "rct",
+    "prospective_cohort",
+    "retrospective_cohort",
+    "case_control",
+    "cross_sectional",
+    "meta_analysis",
+    "systematic_review",
+    "animal_experiment",
+    "in_vitro",
+    "mechanistic_experiment",
+    "descriptive_microbiome",
+    "method_validation",
+    "unclear",
+}
+STUDY_ROLES = {
+    "main_study",
+    "secondary_analysis",
+    "subgroup_analysis",
+    "sensitivity_analysis",
+    "mechanistic_substudy",
+    "external_meta_analysis",
+    "method_validation",
+    "unclear",
+}
+EVIDENCE_ROLES = {
+    "primary_result",
+    "secondary_result",
+    "subgroup_result",
+    "sensitivity_result",
+    "mechanistic_result",
+    "descriptive_result",
+    "adverse_event",
+    "limitation",
+    "method_detail",
+    "background_context",
+    "unclear",
+}
+ASSERTION_TYPES = {
+    "causal_effect",
+    "comparative_effect",
+    "association",
+    "no_association",
+    "descriptive_comparison",
+    "mechanistic_link",
+    "methodological",
+    "safety_signal",
+    "unclear",
+}
+CANONICAL_STATUSES = {"accepted", "needs_review", "rejected"}
 OBSERVATION_ROLES = {"primary_finding", "quantitative_support", "context_support", "limitation_or_caution"}
 UNEXTRACTED_REASONS = {
     "background_only",
@@ -256,7 +312,20 @@ def validate_experiment_map(payload: dict[str, Any], *, block_ids: set[str]) -> 
             raise ValueError(f"Experiment scope {index} must be an object")
         source_block_ids = _normalize_block_id_list(scope.get("source_block_ids"), block_ids, f"Experiment scope {index}")
         referenced.update(source_block_ids)
-        normalized_scopes.append({"source_block_ids": source_block_ids})
+        study_id = str(scope.get("study_id") or scope.get("experiment_scope_id") or f"study_{index + 1}")
+        study_design = str(scope.get("study_design") or "unclear")
+        study_role = str(scope.get("study_role_in_paper") or "unclear")
+        _validate_enum(study_design, STUDY_DESIGNS, f"experiment_scopes[{index}].study_design")
+        _validate_enum(study_role, STUDY_ROLES, f"experiment_scopes[{index}].study_role_in_paper")
+        normalized_scopes.append(
+            {
+                "experiment_scope_id": str(scope.get("experiment_scope_id") or study_id),
+                "study_id": study_id,
+                "source_block_ids": source_block_ids,
+                "study_design": study_design,
+                "study_role_in_paper": study_role,
+            }
+        )
     normalized_unmapped = _normalize_block_id_list(unmapped, block_ids, "Experiment map unmapped_block_ids")
     referenced.update(normalized_unmapped)
     unknown = referenced.difference(block_ids)
@@ -284,6 +353,12 @@ def build_experiment_packets(trimmed: dict[str, Any], experiment_map: dict[str, 
         packets.append(
             {
                 "scope_index": index,
+                "paper_id": experiment_map.get("paper_id"),
+                "experiment_map_id": experiment_map.get("experiment_map_id"),
+                "experiment_scope_id": scope.get("experiment_scope_id"),
+                "study_id": scope.get("study_id") or scope.get("experiment_scope_id") or f"study_{index + 1}",
+                "study_design": scope.get("study_design") or "unclear",
+                "study_role_in_paper": scope.get("study_role_in_paper") or "unclear",
                 "source_block_ids": source_block_ids,
                 "blocks": packet_blocks,
             }
@@ -302,9 +377,19 @@ def validate_canonical_evidence(payload: dict[str, Any], *, block_ids: set[str])
     for index, item in enumerate(evidence_items):
         if not isinstance(item, dict):
             raise ValueError(f"Canonical evidence item {index} must be an object")
+        item = _normalize_canonical_evidence_item(item)
         _validate_enum(item.get("evidence_type"), EVIDENCE_TYPES, f"canonical_evidence[{index}].evidence_type")
+        _validate_enum(item.get("evidence_role_in_paper"), EVIDENCE_ROLES, f"canonical_evidence[{index}].evidence_role_in_paper")
+        _validate_enum(item.get("assertion_type"), ASSERTION_TYPES, f"canonical_evidence[{index}].assertion_type")
         _validate_enum(item.get("organism"), ORGANISMS, f"canonical_evidence[{index}].organism")
-        _validate_enum(item.get("direction"), DIRECTIONS, f"canonical_evidence[{index}].direction")
+        _validate_enum(item.get("effect_direction"), DIRECTIONS, f"canonical_evidence[{index}].effect_direction")
+        _validate_enum(
+            item.get("canonical_evidence_status"),
+            CANONICAL_STATUSES,
+            f"canonical_evidence[{index}].canonical_evidence_status",
+        )
+        if not isinstance(item.get("raw_outcomes"), list):
+            raise ValueError(f"Canonical evidence item {index} raw_outcomes must be a list")
         if not str(item.get("evidence_text") or "").strip():
             raise ValueError(f"Canonical evidence item {index} evidence_text must be non-empty")
         source_block_ids = _normalize_block_id_list(
@@ -379,6 +464,47 @@ def validate_canonical_evidence(payload: dict[str, Any], *, block_ids: set[str])
     return {"canonical_evidence": normalized_evidence, "unextracted_packet_items": normalized_unextracted}
 
 
+def _normalize_canonical_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(item)
+    evidence_type = normalized.get("evidence_type")
+    normalized["evidence_type"] = LEGACY_EVIDENCE_TYPE_MAP.get(str(evidence_type), evidence_type)
+    direction = normalized.get("effect_direction", normalized.get("direction"))
+    normalized["effect_direction"] = LEGACY_DIRECTION_MAP.get(str(direction), direction)
+    normalized.pop("direction", None)
+    normalized["raw_exposure"] = normalized.get("raw_exposure", normalized.get("intervention_or_exposure"))
+    normalized.pop("intervention_or_exposure", None)
+    normalized["raw_outcomes"] = normalized.get("raw_outcomes", normalized.get("outcomes") or [])
+    normalized.pop("outcomes", None)
+    normalized.setdefault("study_id", str(normalized.get("experiment_scope_id") or "unclear"))
+    normalized.setdefault("evidence_role_in_paper", _default_evidence_role(normalized))
+    normalized.setdefault("assertion_type", _default_assertion_type(normalized))
+    normalized.setdefault("canonical_evidence_status", "accepted")
+    if not isinstance(normalized.get("quantitative_data"), dict):
+        normalized["quantitative_data"] = {"summary": None, "values": []}
+    return normalized
+
+
+def _default_evidence_role(item: dict[str, Any]) -> str:
+    evidence_type = item.get("evidence_type")
+    if evidence_type == "specificity_or_selectivity_result":
+        return "mechanistic_result"
+    if evidence_type == "feasibility_result":
+        return "secondary_result"
+    return "primary_result"
+
+
+def _default_assertion_type(item: dict[str, Any]) -> str:
+    evidence_type = item.get("evidence_type")
+    direction = item.get("effect_direction")
+    if direction == "no_effect":
+        return "no_association"
+    if evidence_type == "specificity_or_selectivity_result":
+        return "mechanistic_link"
+    if evidence_type == "between_group_result":
+        return "comparative_effect"
+    return "unclear"
+
+
 async def run_pdf_evidence_async(
     input_path: Path,
     *,
@@ -407,7 +533,9 @@ async def run_pdf_evidence_async(
     experiment_map_output = paper_output_dir / "experiment_map.json"
     experiment_packets_output = paper_output_dir / "experiment_packets.json"
     canonical_output = paper_output_dir / "canonical_evidence.json"
-    if skip_existing and canonical_output.exists():
+    derived_output = paper_output_dir / "general_evidence_artifacts.json"
+    rag_output = paper_output_dir / "rag_export.json"
+    if skip_existing and canonical_output.exists() and derived_output.exists() and rag_output.exists():
         return canonical_output
 
     if llm_client is None:
@@ -460,13 +588,7 @@ async def run_pdf_evidence_async(
     trimmed = build_trimmed_paper(source_payload, paper_id=paper_id)
     validate_trimmed_paper(trimmed)
     _write_json(trimmed_output, trimmed)
-    persist_evidence_blocks(
-        output_store,
-        paper_id=paper_id,
-        blocks=trimmed["blocks"],
-        producer_run_id=producer_run_id,
-    )
-    evidence_blocks = _evidence_blocks_from_store(output_store, paper_id) or trimmed["blocks"]
+    evidence_blocks = trimmed["blocks"]
     block_ids = {str(block["block_id"]) for block in evidence_blocks}
 
     experiment_prompt, experiment_spec = _load_prompt(
@@ -527,10 +649,24 @@ async def run_pdf_evidence_async(
             timeout_seconds=float(canonical_config.get("request_timeout_seconds") or resolved_config.request_timeout_seconds),
         )
         packet_canonical = validate_canonical_evidence(canonical_raw, block_ids=packet_block_ids)
-        canonical["canonical_evidence"].extend(packet_canonical["canonical_evidence"])
+        canonical["canonical_evidence"].extend(
+            _attach_canonical_identity_and_context(
+                packet_canonical["canonical_evidence"],
+                paper_id=paper_id,
+                packet=packet,
+                experiment_map_id=str(experiment_map.get("experiment_map_id") or ""),
+            )
+        )
         canonical["unextracted_packet_items"].extend(packet_canonical["unextracted_packet_items"])
-    validate_canonical_evidence(canonical, block_ids=block_ids)
+    canonical = validate_canonical_evidence(canonical, block_ids=block_ids)
     _write_json(canonical_output, canonical)
+    derived_artifacts = build_general_evidence_artifacts(
+        canonical_evidence=canonical["canonical_evidence"],
+        experiment_map=experiment_map,
+        build_id=producer_run_id,
+    )
+    _write_json(derived_output, derived_artifacts)
+    _write_json(rag_output, derived_artifacts["rag_export"])
     persist_canonical_evidence(
         output_store,
         paper_id=paper_id,
@@ -600,9 +736,36 @@ def _normalize_block_id_list(value: Any, known_block_ids: set[str], label: str) 
     return normalized
 
 
+def _attach_canonical_identity_and_context(
+    items: list[dict[str, Any]],
+    *,
+    paper_id: str,
+    packet: dict[str, Any],
+    experiment_map_id: str,
+) -> list[dict[str, Any]]:
+    output = []
+    for index, item in enumerate(items):
+        normalized = dict(item)
+        normalized["paper_id"] = paper_id
+        normalized["study_id"] = str(packet.get("study_id") or packet.get("experiment_scope_id") or "unclear")
+        normalized["experiment_map_id"] = experiment_map_id
+        normalized["experiment_scope_id"] = str(packet.get("experiment_scope_id") or normalized["study_id"])
+        normalized.setdefault(
+            "canonical_evidence_id",
+            _stable_id("canonical_evidence", paper_id, normalized["study_id"], index, normalized),
+        )
+        output.append(normalized)
+    return output
+
+
 def _validate_enum(value: Any, allowed: set[Any], label: str) -> None:
     if value not in allowed:
         raise ValueError(f"{label} invalid value: {value}")
+
+
+def _stable_id(prefix: str, *parts: Any) -> str:
+    encoded = json.dumps(parts, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"{prefix}_{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -664,9 +827,3 @@ def _structured_paper_from_store(store: ScientificOutputStore | None, paper_id: 
     if payload is None:
         return None
     return {**payload, "paper_id": str(payload.get("paper_id") or paper_id)}
-
-
-def _evidence_blocks_from_store(store: ScientificOutputStore | None, paper_id: str) -> list[dict[str, Any]]:
-    if store is None:
-        return []
-    return store.fetch_evidence_blocks(paper_id)

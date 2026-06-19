@@ -43,7 +43,6 @@ uv run pytest tests/test_cli_smoke.py -q
 - [Arquitectura](100-ARCHITECTURE.md)
 - [Contratos](300-CONTRACTS.md)
 - [Contrato de layout](contracts/local/data-layout.md)
-- [Contrato de configuración y CLI](contracts/local/configuration-and-cli.md)
 - [Contrato de handoffs](contracts/local/stage-handoffs.md)
 - [Contrato de schemas](contracts/local/artifact-schemas.md)
 - [Contrato de StructuredBlock](contracts/fundamental/scientific/structured-block.md)

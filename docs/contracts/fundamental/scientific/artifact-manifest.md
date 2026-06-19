@@ -8,7 +8,7 @@ owner: victus-processing
 domain: storage
 contract_type: storage
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-19
 ---
 
 # ArtifactManifest Contract Documentation
@@ -152,25 +152,13 @@ None.
 
 ## 9. Operational Notes
 
-Initial JSONL target:
+Durable JSONL target:
 
 ```text
 data/registry/artifact_manifest.jsonl
 ```
 
-Future database target:
-
-```text
-artifact_manifests
-```
-
-Recommended indexes:
-
-- `artifact_id`
-- `artifact_type`
-- `paper_id`
-- `run_id`
-- `created_at`
+Artifact manifests are not persisted to PostgreSQL.
 
 ## 10. Versioning
 

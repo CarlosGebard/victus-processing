@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-ARTIFACT-INVENTORY-CONTRACT
 title: Victus Processing Artifact Inventory Contract
 status: source-of-truth
-updated_at: 2026-06-10
+updated_at: 2026-06-19
 related_components:
   - src.application.metadata_extraction
   - src.application.bibliography_export
@@ -43,9 +43,9 @@ payloads so the same model can later be mirrored into PostgreSQL.
 | `data/lake/experiment_maps.jsonl` | ExperimentMap records. |
 | `data/lake/experiment_packets.jsonl` | Deterministic packet records used for evidence extraction. |
 | `data/lake/canonical_evidence.jsonl` | CanonicalEvidence records. |
-| `data/lake/pipeline_runs.jsonl` | Optional legacy PipelineRun execution records. |
-| `data/lake/pipeline_events.jsonl` | Optional legacy PipelineEvent append-only execution events. |
-| `data/lake/paper_stage_state.jsonl` | Optional legacy state per paper and stage. |
+| `data/lake/pipeline_runs.jsonl` | PipelineRun execution records. |
+| `data/lake/pipeline_events.jsonl` | PipelineEvent append-only execution events. |
+| `data/lake/paper_stage_state.jsonl` | Local state per paper and stage. |
 
 ## 3. Physical Artifacts
 
@@ -83,7 +83,7 @@ scientific records.
 | Artifact | Purpose |
 | --- | --- |
 | `data/registry/artifact_manifest.jsonl` | ArtifactRegistry/ArtifactManifest records for physical artifacts. |
-| `data/registry/artifact_registry.jsonl` | Optional legacy global artifact index. |
+| `data/registry/artifact_registry.jsonl` | Local artifact index. |
 | `data/registry/documents.jsonl` | Compatibility document index. |
 | `data/registry/links.jsonl` | Compatibility document-to-paper links. |
 

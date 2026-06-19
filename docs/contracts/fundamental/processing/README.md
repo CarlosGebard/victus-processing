@@ -3,28 +3,28 @@
 Processing contracts define operational registry, execution, artifact, and error
 tracking guarantees for `victus-processing`.
 
-These contracts support reproducibility, debugging, promotion, and coexistence of
-multiple pipeline versions. They do not define scientific object schemas; those
-live under [Scientific Contracts](../scientific/README.md).
+These contracts support reproducibility, debugging, promotion, and coexistence
+of multiple pipeline versions. Scientific object schemas live in the sibling
+`scientific/` directory.
 
 ## Contract Index
 
 | Contract | Identifier | Status | Purpose |
 |---|---|---|---|
 | [Paper Processing State](../scientific/paper-processing-state.md) | `victus.scientific.paper_processing_state@v1` | active | Current operational dashboard row per paper |
-| [Pipeline Runs](pipeline-runs.md) | `victus.processing.pipeline_runs@v1` | optional | Legacy/optional run observability |
 
 ## Registry Flow
 
 ```text
 data/artifacts inputs
   -> scientific PostgreSQL tables
+  -> paper_pipeline_state
   -> paper_processing_state
 ```
 
-`paper_processing_state` tracks current operational state. Scientific output
-tables store processed results. Pipeline run/event tables are optional
-observability and are not required for v1 operation.
+`paper_processing_state` tracks current operational state,
+`paper_pipeline_state` stores paper-scoped stage attempts, and scientific output
+tables store processed results. Detailed runs and events remain local JSONL.
 
 ## Boundary
 

@@ -1,28 +1,23 @@
-# Structured Paper DB Flow
+# PostgreSQL Simplification — Completed
 
 ## Goal
-Persist the full processed paper as `structured_paper`, classify from database payloads, and persist evidence-ready blocks only after primary-research classification.
 
-## Scope
-- Add `structured_papers` and `evidence_blocks` persistence.
-- Remove useless source PDF path from processed payloads.
-- Keep local JSON artifacts for compatibility.
-- Move processing state from `has_structured_blocks` to `has_structured_paper` / `has_evidence_blocks`.
+Provide one clean PostgreSQL schema for scientific outputs and paper-scoped
+pipeline state while preserving `structured_papers` during migration.
 
-## Assumptions
-- `paper_id` is the canonical identifier for the PDF/paper.
-- `structured_blocks` remains legacy/indexable storage and is not the new stage gate.
+## Delivered
 
-## Steps
-1. Add store APIs and PostgreSQL tables for `structured_papers` and `evidence_blocks`.
-2. Persist `structured_paper` from PDF/Markdown processing.
-3. Classify from DB payloads when a store is available; keep file fallback.
-4. Persist and consume `evidence_blocks` after primary-research classification.
-5. Update processing-state facts and docs/tests.
+- `paper_pipeline_state` stores one row per paper stage attempt.
+- `paper_processing_state` is the derived dashboard projection.
+- Scientific outputs use dedicated tables aligned with current contracts.
+- Trimmed evidence blocks are derived in memory.
+- Detailed run events and artifact manifests remain local JSON/JSONL artifacts.
+- Migration 005 is the standalone schema entrypoint for new and existing
+  databases.
 
 ## Validation
-- `uv run pytest`
-- CLI smoke help tests
 
-## Risks
-- Existing DBs need the updated SQL migration applied before DB-backed runs.
+- Migration applied successfully on 2026-06-19.
+- All 109 `structured_papers` rows were preserved.
+- Target tables and canonical-evidence query columns were verified.
+- Repository test result: `38 passed`.

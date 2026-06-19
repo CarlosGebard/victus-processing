@@ -2,7 +2,7 @@
 id: VICTUS-PROCESSING-DATA-LAYOUT-CONTRACT
 title: Victus Processing Data Layout Contract
 status: source-of-truth
-updated_at: 2026-06-11
+updated_at: 2026-06-19
 related_components:
   - src.workspace.config
   - src.workspace.data_layout
@@ -63,9 +63,9 @@ data/
     experiment_maps.jsonl
     experiment_packets.jsonl
     canonical_evidence.jsonl
-    pipeline_runs.jsonl                  # optional legacy observability
-    pipeline_events.jsonl                # optional legacy observability
-    paper_stage_state.jsonl              # optional legacy observability
+    pipeline_runs.jsonl                  # run records
+    pipeline_events.jsonl                # append-only event records
+    paper_stage_state.jsonl              # local current stage state
 
   artifacts/
     intake/
@@ -107,7 +107,7 @@ data/
 
   registry/
     artifact_manifest.jsonl
-    artifact_registry.jsonl              # optional legacy observability
+    artifact_registry.jsonl              # local artifact index
     documents.jsonl
     links.jsonl
 

@@ -48,26 +48,14 @@ def replay_outbox(*, outbox_file: Path, conninfo: str, dry_run: bool = False) ->
 
 
 def _deliver(store: PostgresPipelineRecordStore, record_type: str, payload: dict[str, Any]) -> None:
-    if record_type == "pipeline_run":
-        store.upsert_pipeline_run(payload)
-        return
-    if record_type == "pipeline_event":
-        store.insert_pipeline_event(payload)
-        return
-    if record_type == "paper_stage_state":
-        store.upsert_paper_stage_state(payload)
-        return
-    if record_type == "artifact_registry":
-        store.upsert_artifact_registry(payload)
+    if record_type == "paper_pipeline_state":
+        store.upsert_paper_pipeline_state(payload)
         return
     if record_type == "structured_paper":
         store.upsert_structured_paper(payload)
         return
     if record_type == "structured_blocks":
         store.upsert_structured_blocks(payload)
-        return
-    if record_type == "evidence_blocks":
-        store.upsert_evidence_blocks(payload)
         return
     if record_type == "paper_classification":
         store.upsert_paper_classification(payload)

@@ -8,7 +8,7 @@ owner: victus-processing
 domain: scientific
 contract_type: domain
 stability: experimental
-updated_at: 2026-06-09
+updated_at: 2026-06-17
 ---
 
 # ExperimentMap Contract Documentation
@@ -25,9 +25,10 @@ An experiment scope represents a coherent result-centered context supported by s
 
 ExperimentMap is a derived mapping artifact.
 
-ExperimentMap does not extract evidence, infer experiments, describe protocols, normalize scientific findings, or generate conclusions.
+ExperimentMap does not extract evidence, infer findings, normalize scientific findings, rank evidence, or generate conclusions.
 
-Its sole responsibility is block grouping.
+Its responsibility is block grouping plus minimal methodological scope context
+needed by downstream evidence derivation.
 
 ## 2. Identity
 
@@ -62,9 +63,12 @@ Downstream extraction workflows may consume ExperimentMap but must not modify it
   "experiment_scopes": [
     {
       "experiment_scope_id": "string",
+      "study_id": "string",
       "source_block_ids": [
         "string"
-      ]
+      ],
+      "study_design": "rct|prospective_cohort|retrospective_cohort|case_control|cross_sectional|meta_analysis|systematic_review|animal_experiment|in_vitro|mechanistic_experiment|descriptive_microbiome|method_validation|unclear",
+      "study_role_in_paper": "main_study|secondary_analysis|subgroup_analysis|sensitivity_analysis|mechanistic_substudy|external_meta_analysis|method_validation|unclear"
     }
   ],
   "unmapped_block_ids": [
@@ -81,7 +85,10 @@ Downstream extraction workflows may consume ExperimentMap but must not modify it
 | `paper_id` | String | Source Paper identifier. |
 | `experiment_scopes` | Array[Object] | Result-centered block groups used as downstream evidence extraction contexts. |
 | `experiment_scopes[].experiment_scope_id` | String | Deterministic identifier for the scope within the mapping artifact. |
+| `experiment_scopes[].study_id` | String | Study/scope identifier used by CanonicalEvidence. May equal `experiment_scope_id` for compatibility. |
 | `experiment_scopes[].source_block_ids` | Array[String] | StructuredBlock identifiers belonging to the same coherent result-centered context. |
+| `experiment_scopes[].study_design` | Enum | Methodological design for the mapped scope. Use `unclear` when uncertain. |
+| `experiment_scopes[].study_role_in_paper` | Enum | Role of the mapped scope within the paper. Use `unclear` when uncertain. |
 | `unmapped_block_ids` | Array[String] | StructuredBlock identifiers not directly required for any result-centered scope. |
 
 ## 5. Responsibilities
@@ -95,6 +102,7 @@ ExperimentMap must:
 * keep result families separate when they represent different measurement or analytical contexts
 * attach directly required method blocks only after result anchors are identified
 * leave unrelated, generic, or unsupported blocks unmapped
+* preserve `study_id`, `study_design`, and `study_role_in_paper` for downstream traceability
 * support downstream CanonicalEvidence extraction
 
 ### Forbidden Responsibilities
@@ -110,14 +118,16 @@ ExperimentMap must not store:
 * outcome extraction
 * direction extraction
 * statistics extraction
-* experiment descriptions
-* experiment labels
+* evidence roles
+* assertion types
 * scientific conclusions
+* evidence ranks
+* exposure IDs or outcome IDs
 * retrieval scores
 * embeddings
 * pipeline execution state
 
-ExperimentMap must not infer experiments, protocols, outcomes, populations, or findings that are not explicitly supported by source blocks.
+ExperimentMap must not infer outcomes, populations, findings, or claims that are not explicitly supported by source blocks.
 
 ExperimentMap must not use methods blocks to merge otherwise separate result-centered contexts.
 
@@ -129,7 +139,12 @@ ExperimentMap must not use methods blocks to merge otherwise separate result-cen
   StructuredBlock inputs, mapping rules, and contract-compatible mapping output.
 * `paper_id` must reference an existing Paper.
 * Every scope must include an `experiment_scope_id`.
+* Every scope must include a `study_id`; it may equal `experiment_scope_id`.
 * `experiment_scope_id` must be deterministic within the mapping artifact.
+* `study_design` must use the allowed enum and should be `unclear` when not
+  directly supported by the mapped blocks.
+* `study_role_in_paper` must use the allowed enum and should be `unclear` when
+  not directly supported by the mapped blocks.
 * Every `source_block_ids` value must reference an existing StructuredBlock.
 * Every `unmapped_block_ids` value must reference an existing StructuredBlock.
 * A block id must not appear more than once inside the same scope.
@@ -208,11 +223,20 @@ ExperimentMap versions may be deprecated when replaced by a newer contract versi
 
 ExperimentMap is a lightweight grouping artifact.
 
-It should remain minimal, deterministic, and independent from downstream evidence schema design.
+It should remain minimal, deterministic, and independent from downstream
+ranking, aggregation, and retrieval design.
 
 ExperimentMap should not become a hidden experiment model.
 
 The name `experiment_scope` is operational, not ontological.
+
+`study_id` is a downstream traceability handle, not a claim that the scope is a
+complete trial, cohort, experiment, or paper-level study.
+
+`study_design` belongs here because it describes the methodological context of
+the scope. It does not belong in CanonicalEvidence, EvidenceProjection rank
+inputs except as copied context, or GeneralEvidence aggregation outputs as a
+source-of-truth field.
 
 A single paper may produce zero, one, or many scopes.
 
