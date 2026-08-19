@@ -24,7 +24,6 @@ victus-processing = "src.cli:main"
 victus-infisical-env = "ops.scripts.infisical_env:main"
 victus-postgres-export = "ops.scripts.export_postgres_tables:main"
 victus-canonical-evidence-sample = "ops.scripts.sample_canonical_evidence:main"
-contracts = "ops.scripts.contracts:main"
 
 [dependency-groups]
 dev = [

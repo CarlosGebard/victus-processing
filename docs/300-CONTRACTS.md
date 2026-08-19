@@ -25,9 +25,8 @@ or stage handoffs.
 
 Contracts are split by source and responsibility:
 
-- `docs/contracts/fundamental/`: ecosystem-level contracts synchronized from
-  `victus-docs`. These define shared Victus interfaces and preserve the central
-  contract repository subdirectory layout.
+- `docs/contracts/fundamental/`: ecosystem-level contracts retained and owned
+  in this repository.
 - `docs/contracts/local/`: repository-specific contracts owned here.
 
 ## Fundamental Contracts
