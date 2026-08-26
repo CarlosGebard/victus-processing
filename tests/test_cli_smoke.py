@@ -102,6 +102,7 @@ def test_json_from_markdown_input_dir_skips_oversized_batches(
             shuffle=False,
             seed=1,
             limit=None,
+            workers=2,
         )
     )
 
@@ -110,6 +111,45 @@ def test_json_from_markdown_input_dir_skips_oversized_batches(
     assert "[OK] Markdown JSON outputs: 1" in captured.out
     assert str(output) in captured.out
     assert processed_paths == [valid]
+
+
+def test_evidence_extraction_prints_immediate_progress_and_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = object()
+
+    def fake_run_pdf_evidence_db(**kwargs: object) -> list[str]:
+        assert kwargs["workers"] == 3
+        progress = kwargs["progress"]
+        assert callable(progress)
+        progress("start", {"index": 1, "total": 2, "paper_id": "paper_1"})
+        progress(
+            "classified",
+            {"index": 1, "total": 2, "paper_id": "paper_1", "paper_family": "primary_research"},
+        )
+        progress("mapped", {"index": 1, "total": 2, "paper_id": "paper_1", "experiments": 3})
+        progress("done", {"index": 1, "total": 2, "paper_id": "paper_1", "evidence_rows": 12})
+        progress("start", {"index": 2, "total": 2, "paper_id": "paper_2"})
+        progress("skip", {"index": 2, "total": 2, "paper_id": "paper_2", "reason": "existing"})
+        return ["paper_1", "paper_2"]
+
+    monkeypatch.setattr(cli, "_pipeline_record_store", lambda: store)
+    monkeypatch.setattr(cli, "build_llm_client", lambda: object())
+    monkeypatch.setattr(cli, "build_prompt_registry", lambda: object())
+    monkeypatch.setattr(cli, "run_pdf_evidence_db", fake_run_pdf_evidence_db)
+
+    cli.cmd_pdf_processing_evidence(
+        argparse.Namespace(model=None, skip_existing=True, paper_id=None, limit=None, workers=3)
+    )
+
+    output = capsys.readouterr().out
+    assert "[1/2] START paper_1" in output
+    assert "[1/2] CLASSIFIED paper_1 family=primary_research" in output
+    assert "[1/2] MAPPED paper_1 experiments=3" in output
+    assert "[1/2] DONE paper_1 evidence_rows=12" in output
+    assert "[2/2] SKIP paper_2 reason=existing" in output
+    assert "[OK] Evidence extraction finished: handled=2 completed=1 skipped=1" in output
 
 
 def test_metadata_seed_dois_reads_paper_metadata_jsonl(tmp_path: Path) -> None:

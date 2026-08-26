@@ -20,6 +20,11 @@ DEFAULT_TABLES = (
     "paper_classifications",
     "experiment_maps",
     "canonical_evidence",
+    "exposure_registry",
+    "outcome_registry",
+    "evidence_projections",
+    "general_evidence",
+    "general_evidence_support",
 )
 ALLOWED_TABLES = DEFAULT_TABLES + (
     "structured_papers",

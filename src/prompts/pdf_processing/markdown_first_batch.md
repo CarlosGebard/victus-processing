@@ -319,6 +319,9 @@ Do not include markdown.
 Do not include explanations.
 Do not include comments.
 Do not include trailing commas.
+JSON strings must use valid JSON escaping.
+Do not use Markdown escapes such as `\_`.
+Encode a literal backslash as `\\`.
 
 # SCHEMA
 

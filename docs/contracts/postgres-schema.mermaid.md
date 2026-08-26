@@ -1,6 +1,6 @@
 # PostgreSQL Schema
 
-`ops/sql/005_simplified_postgres_schema.sql` is the active schema source.
+Migrations 005 and 006 are the active schema sources.
 
 ```mermaid
 erDiagram
@@ -123,6 +123,53 @@ erDiagram
     timestamptz updated_at
   }
 
+  exposure_registry {
+    text exposure_id PK
+    text canonical_name
+    text display_name
+    text exposure_type
+    jsonb payload
+  }
+
+  outcome_registry {
+    text outcome_id PK
+    text canonical_name
+    text display_name
+    text outcome_type
+    jsonb payload
+  }
+
+  evidence_projections {
+    text projection_id PK
+    text build_id
+    text canonical_evidence_id
+    text paper_id
+    text exposure_id
+    text outcome_id
+    text evidence_rank
+    text projection_status
+    jsonb payload
+  }
+
+  general_evidence {
+    text general_evidence_id PK
+    text build_id
+    text exposure_id
+    text outcome_id
+    text consensus_level
+    integer paper_count
+    integer study_count
+    integer evidence_count
+    text status
+    jsonb payload
+  }
+
+  general_evidence_support {
+    text general_evidence_id PK,FK
+    text projection_id PK,FK
+    text support_role PK
+  }
+
   paper_pipeline_state }o--|| paper_processing_state : summarizes_into
   structured_papers ||--o{ structured_blocks : contains
   structured_papers ||--o{ paper_classifications : classified_as
@@ -130,9 +177,15 @@ erDiagram
   structured_papers ||--o{ canonical_evidence : yields
   experiment_maps ||--o{ canonical_evidence : scopes
   structured_blocks ||--o{ canonical_evidence : grounds
+  canonical_evidence ||--o{ evidence_projections : classifies_into
+  exposure_registry ||--o{ evidence_projections : normalizes
+  outcome_registry ||--o{ evidence_projections : normalizes
+  exposure_registry ||--o{ general_evidence : groups
+  outcome_registry ||--o{ general_evidence : groups
+  general_evidence ||--o{ general_evidence_support : contains
+  evidence_projections ||--o{ general_evidence_support : supports
 ```
 
-PostgreSQL stores durable scientific outputs, per-attempt pipeline state, and a
-derived per-paper dashboard state. Trimmed evidence blocks are derived in
-memory from structured paper content. Detailed events and artifact manifests
-remain local JSON/JSONL artifacts.
+PostgreSQL stores durable scientific outputs, build-versioned evidence
+classification and aggregation, per-attempt pipeline state, and a derived
+per-paper dashboard state. RAG export remains a local JSON handoff.

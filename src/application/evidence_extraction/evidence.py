@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.workspace import config as ctx
 from src.application.evidence_derivation.general_evidence import build_general_evidence_artifacts
@@ -23,6 +23,7 @@ from src.infrastructure.prompts.compile import compile_template
 
 
 EVIDENCE_SECTION_TYPES = {"methods", "results", "discussion", "conclusion"}
+EvidenceProgressCallback = Callable[[str, dict[str, Any]], None]
 CLASSIFIER_EXCLUDED_SECTION_TYPES = {
     "front_matter",
     "references",
@@ -146,7 +147,6 @@ UNEXTRACTED_REASONS = {
 
 @dataclass(frozen=True)
 class EvidenceProcessingConfig:
-    output_dir: Path
     model: str
     prompt_paper_classifier: Path
     prompt_results_scope_mapper: Path
@@ -157,7 +157,6 @@ class EvidenceProcessingConfig:
 def load_evidence_processing_config() -> EvidenceProcessingConfig:
     cfg = ctx.CONFIG.get("evidence") or {}
     return EvidenceProcessingConfig(
-        output_dir=ctx.resolve_project_path(cfg.get("output_dir"), ctx.EVIDENCE_OUTPUT_DIR),
         model=str(cfg.get("model", "litellm_proxy/gemini-flash-lite")),
         prompt_paper_classifier=ctx.resolve_project_path(
             cfg.get("prompt_paper_classifier"),
@@ -506,9 +505,8 @@ def _default_assertion_type(item: dict[str, Any]) -> str:
 
 
 async def run_pdf_evidence_async(
-    input_path: Path,
+    paper_id: str,
     *,
-    output_dir: Path | None = None,
     model: str | None = None,
     skip_existing: bool = False,
     llm_client: LLMClient | None = None,
@@ -516,27 +514,17 @@ async def run_pdf_evidence_async(
     prompt_label: str = "production",
     output_store: ScientificOutputStore | None = None,
     producer_run_id: str | None = None,
-) -> Path:
+    progress: EvidenceProgressCallback | None = None,
+) -> str:
+    if output_store is None:
+        raise RuntimeError("PostgreSQL scientific output store is required")
     resolved_config = load_evidence_processing_config()
-    output_root = output_dir.expanduser().resolve() if output_dir is not None else resolved_config.output_dir
-    source_path = input_path.expanduser().resolve()
-    file_payload = _read_json(source_path) if source_path.exists() else {}
-    paper_id = _paper_id_from_path_or_payload(source_path, file_payload)
-    source_payload = _structured_paper_from_store(output_store, paper_id) or file_payload
+    source_payload = _structured_paper_from_store(output_store, paper_id)
     if not source_payload:
-        raise FileNotFoundError(f"Structured paper not found in DB or filesystem: {input_path}")
-    paper_output_dir = output_root / paper_id
-    classifier_input_output = paper_output_dir / "paper.classifier_input.json"
-    classification_output = paper_output_dir / "paper.classification.json"
-    evidence_skipped_output = paper_output_dir / "evidence_skipped.json"
-    trimmed_output = paper_output_dir / "trimmed.json"
-    experiment_map_output = paper_output_dir / "experiment_map.json"
-    experiment_packets_output = paper_output_dir / "experiment_packets.json"
-    canonical_output = paper_output_dir / "canonical_evidence.json"
-    derived_output = paper_output_dir / "general_evidence_artifacts.json"
-    rag_output = paper_output_dir / "rag_export.json"
-    if skip_existing and canonical_output.exists() and derived_output.exists() and rag_output.exists():
-        return canonical_output
+        raise FileNotFoundError(f"Structured paper not found in PostgreSQL: {paper_id}")
+    if skip_existing and output_store.has_canonical_evidence(paper_id):
+        _emit_progress(progress, "skip", paper_id=paper_id, reason="existing")
+        return paper_id
 
     if llm_client is None:
         raise RuntimeError("LLM client is required.")
@@ -544,7 +532,6 @@ async def run_pdf_evidence_async(
 
     classifier_input = build_classifier_input(source_payload, paper_id=paper_id)
     validate_classifier_input(classifier_input)
-    _write_json(classifier_input_output, classifier_input)
 
     classifier_prompt, classifier_spec = _load_prompt(
         prompt_registry,
@@ -567,27 +554,30 @@ async def run_pdf_evidence_async(
         timeout_seconds=float(classifier_config.get("request_timeout_seconds") or resolved_config.request_timeout_seconds),
     )
     classification = validate_paper_classification(classification_raw)
-    _write_json(classification_output, classification)
     persist_paper_classification(
         output_store,
         paper_id=paper_id,
         classification=classification,
         producer_run_id=producer_run_id,
     )
+    _emit_progress(
+        progress,
+        "classified",
+        paper_id=paper_id,
+        paper_family=classification["paper_family"],
+    )
     if classification["paper_family"] != "primary_research":
-        skipped = {
-            "paper_id": paper_id,
-            "reason": "non_primary_research",
-            "paper_family": classification["paper_family"],
-            "paper_type": classification["paper_type"],
-            "evidence_generation_mode": classification["evidence_generation_mode"],
-        }
-        _write_json(evidence_skipped_output, skipped)
-        return evidence_skipped_output
+        _emit_progress(
+            progress,
+            "done",
+            paper_id=paper_id,
+            evidence_rows=0,
+            reason="non_primary_research",
+        )
+        return paper_id
 
     trimmed = build_trimmed_paper(source_payload, paper_id=paper_id)
     validate_trimmed_paper(trimmed)
-    _write_json(trimmed_output, trimmed)
     evidence_blocks = trimmed["blocks"]
     block_ids = {str(block["block_id"]) for block in evidence_blocks}
 
@@ -616,15 +606,19 @@ async def run_pdf_evidence_async(
         "paper_id": paper_id,
         "experiment_map_id": stable_experiment_map_id(paper_id, experiment_map),
     }
-    _write_json(experiment_map_output, experiment_map)
     persist_experiment_map(
         output_store,
         paper_id=paper_id,
         experiment_map=experiment_map,
         producer_run_id=producer_run_id,
     )
+    _emit_progress(
+        progress,
+        "mapped",
+        paper_id=paper_id,
+        experiments=len(experiment_map["experiment_scopes"]),
+    )
     experiment_packets = build_experiment_packets({"metadata": trimmed["metadata"], "blocks": evidence_blocks}, experiment_map)
-    _write_json(experiment_packets_output, {"experiment_packets": experiment_packets})
 
     canonical_prompt, canonical_spec = _load_prompt(
         prompt_registry,
@@ -659,14 +653,6 @@ async def run_pdf_evidence_async(
         )
         canonical["unextracted_packet_items"].extend(packet_canonical["unextracted_packet_items"])
     canonical = validate_canonical_evidence(canonical, block_ids=block_ids)
-    _write_json(canonical_output, canonical)
-    derived_artifacts = build_general_evidence_artifacts(
-        canonical_evidence=canonical["canonical_evidence"],
-        experiment_map=experiment_map,
-        build_id=producer_run_id,
-    )
-    _write_json(derived_output, derived_artifacts)
-    _write_json(rag_output, derived_artifacts["rag_export"])
     persist_canonical_evidence(
         output_store,
         paper_id=paper_id,
@@ -674,11 +660,23 @@ async def run_pdf_evidence_async(
         experiment_map_id=experiment_map.get("experiment_map_id"),
         producer_run_id=producer_run_id,
     )
-    return canonical_output
+    derived_artifacts = build_general_evidence_artifacts(
+        canonical_evidence=canonical["canonical_evidence"],
+        experiment_map=experiment_map,
+        build_id=producer_run_id,
+    )
+    output_store.replace_evidence_derivation_build(derived_artifacts)
+    _emit_progress(
+        progress,
+        "done",
+        paper_id=paper_id,
+        evidence_rows=len(canonical["canonical_evidence"]),
+    )
+    return paper_id
 
 
-def run_pdf_evidence(input_path: Path, **kwargs: Any) -> Path:
-    return asyncio.run(run_pdf_evidence_async(input_path, **kwargs))
+def run_pdf_evidence(paper_id: str, **kwargs: Any) -> str:
+    return asyncio.run(run_pdf_evidence_async(paper_id, **kwargs))
 
 
 async def run_pdf_evidence_db_async(
@@ -686,44 +684,64 @@ async def run_pdf_evidence_db_async(
     store: ScientificOutputStore,
     paper_id: str | None = None,
     limit: int | None = None,
+    workers: int = 1,
+    progress: EvidenceProgressCallback | None = None,
     **kwargs: Any,
-) -> list[Path]:
+) -> list[str]:
+    if workers < 1:
+        raise ValueError("workers must be >= 1")
     if paper_id:
         paper_ids = [paper_id]
     else:
         paper_ids = store.fetch_structured_paper_ids(limit=limit)
-    outputs = []
-    for current_paper_id in paper_ids:
-        outputs.append(await run_pdf_evidence_async(Path(current_paper_id), output_store=store, **kwargs))
+    outputs: list[str] = []
+    total = len(paper_ids)
+    queue: asyncio.Queue[tuple[int, str]] = asyncio.Queue()
+    for index, current_paper_id in enumerate(paper_ids, start=1):
+        queue.put_nowait((index, current_paper_id))
+
+    async def worker() -> None:
+        while True:
+            try:
+                index, current_paper_id = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+
+            def indexed_progress(event: str, details: dict[str, Any]) -> None:
+                _emit_progress(progress, event, index=index, total=total, **details)
+
+            indexed_progress("start", {"paper_id": current_paper_id})
+            try:
+                outputs.append(
+                    await run_pdf_evidence_async(
+                        current_paper_id,
+                        output_store=store,
+                        progress=indexed_progress,
+                        **kwargs,
+                    )
+                )
+            except Exception as exc:
+                indexed_progress("error", {"paper_id": current_paper_id, "error": str(exc)})
+                raise
+            finally:
+                queue.task_done()
+
+    if not paper_ids:
+        return outputs
+    await asyncio.gather(*(worker() for _ in range(min(workers, len(paper_ids)))))
     return outputs
 
-
-def run_pdf_evidence_db(*, store: ScientificOutputStore, **kwargs: Any) -> list[Path]:
+def run_pdf_evidence_db(*, store: ScientificOutputStore, **kwargs: Any) -> list[str]:
     return asyncio.run(run_pdf_evidence_db_async(store=store, **kwargs))
 
 
-async def run_pdf_evidence_dir_async(
-    input_dir: Path,
-    *,
-    output_dir: Path | None = None,
-    pattern: str = "*/paper.processed.json",
-    limit: int | None = None,
-    **kwargs: Any,
-) -> list[Path]:
-    source_dir = input_dir.expanduser().resolve()
-    outputs = []
-    paths = sorted(source_dir.glob(pattern))
-    if limit is not None:
-        if limit < 1:
-            raise ValueError("limit must be >= 1 when provided")
-        paths = paths[:limit]
-    for path in paths:
-        outputs.append(await run_pdf_evidence_async(path, output_dir=output_dir, **kwargs))
-    return outputs
-
-
-def run_pdf_evidence_dir(input_dir: Path, **kwargs: Any) -> list[Path]:
-    return asyncio.run(run_pdf_evidence_dir_async(input_dir, **kwargs))
+def _emit_progress(
+    progress: EvidenceProgressCallback | None,
+    event: str,
+    **details: Any,
+) -> None:
+    if progress is not None:
+        progress(event, details)
 
 
 def _normalize_block_id_list(value: Any, known_block_ids: set[str], label: str) -> list[str]:
@@ -768,18 +786,6 @@ def _stable_id(prefix: str, *parts: Any) -> str:
     return f"{prefix}_{hashlib.sha256(encoded).hexdigest()}"
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"JSON input must be an object: {path}")
-    return payload
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
 def _load_prompt(
     registry: PromptRegistry | None,
     *,
@@ -796,15 +802,6 @@ def _load_prompt(
     if not local_path.exists():
         raise FileNotFoundError(f"Prompt file not found: {local_path}")
     return local_path.read_text(encoding="utf-8"), None
-
-
-def _paper_id_from_path_or_payload(path: Path, payload: dict[str, Any]) -> str:
-    paper_id = _paper_id_from_payload(payload)
-    if paper_id != "paper":
-        return paper_id
-    if path.name in {"paper.processed.json", "paper.final.json", "paper.json"} and path.parent.name:
-        return path.parent.name
-    return path.stem
 
 
 def _paper_id_from_payload(payload: dict[str, Any]) -> str:

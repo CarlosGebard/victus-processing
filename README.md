@@ -49,12 +49,8 @@ uv run pytest tests/test_cli_smoke.py -q
 
 ## Documentation
 
-- [System Context](docs/000-SYSTEM-CONTEXT.md)
-- [Architecture](docs/100-ARCHITECTURE.md)
-- [Contracts](docs/300-CONTRACTS.md)
-- [Operations](docs/200-OPERATIONS.md)
-- [CLI](docs/operations/cli.md)
-- [Runbooks](docs/operations/runbooks/)
+To get the complete picture I recommend seeing the full victus documentation: 
+https://wiki.victus.fit/
 
 ## Responsibilities
 

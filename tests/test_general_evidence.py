@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 
 from src.application.evidence_derivation.general_evidence import (
+    build_corpus_general_evidence_artifacts,
     build_general_evidence_artifacts,
     build_rag_export,
     validate_conclusion_text,
 )
-from src.application.evidence_derivation.stage import build_evidence_derivation_for_paper
+from src.application.evidence_derivation.stage import build_evidence_derivation_dir, build_evidence_derivation_for_paper
 
 
 def _canonical(
@@ -121,6 +122,45 @@ def test_general_evidence_counts_support_units_not_raw_records() -> None:
     assert general["study_direction_distribution"]["increase"] == 1
 
 
+def test_corpus_general_evidence_aggregates_across_papers() -> None:
+    artifacts = build_corpus_general_evidence_artifacts(
+        papers=[
+            {
+                "canonical_evidence": [_canonical("ev_1", paper_id="paper_1")],
+                "experiment_map": _experiment_map(),
+            },
+            {
+                "canonical_evidence": [_canonical("ev_2", paper_id="paper_2")],
+                "experiment_map": {**_experiment_map(), "paper_id": "paper_2"},
+            },
+        ],
+        build_id="build_1",
+    )
+
+    general = artifacts["general_evidence"][0]
+
+    assert general["build_id"] == "build_1"
+    assert general["paper_count"] == 2
+    assert general["study_count"] == 2
+    assert len(artifacts["general_evidence_support"]) >= 2
+
+
+def test_build_id_versions_projection_and_general_evidence_identity() -> None:
+    first = build_general_evidence_artifacts(
+        canonical_evidence=[_canonical("ev_1")],
+        experiment_map=_experiment_map(),
+        build_id="build_1",
+    )
+    second = build_general_evidence_artifacts(
+        canonical_evidence=[_canonical("ev_1")],
+        experiment_map=_experiment_map(),
+        build_id="build_2",
+    )
+
+    assert first["evidence_projections"][0]["projection_id"] != second["evidence_projections"][0]["projection_id"]
+    assert first["general_evidence"][0]["general_evidence_id"] != second["general_evidence"][0]["general_evidence_id"]
+
+
 def test_rag_export_filters_general_and_support_documents() -> None:
     general = [
         {"general_evidence_id": "ge_1", "status": "active", "consensus_level": "moderate", "recommendation_use": "usable_with_caveat"},
@@ -170,3 +210,31 @@ def test_evidence_derivation_stage_writes_outputs(tmp_path) -> None:
     assert output == paper_dir.resolve() / "general_evidence_artifacts.json"
     assert output.exists()
     assert (paper_dir / "rag_export.json").exists()
+
+
+def test_directory_derivation_writes_one_corpus_build_and_persists_it(tmp_path) -> None:
+    class Store:
+        def __init__(self) -> None:
+            self.artifacts: dict[str, object] | None = None
+
+        def replace_evidence_derivation_build(self, artifacts: dict[str, object]) -> None:
+            self.artifacts = artifacts
+
+    for paper_id in ("paper_1", "paper_2"):
+        paper_dir = tmp_path / paper_id
+        paper_dir.mkdir()
+        (paper_dir / "canonical_evidence.json").write_text(
+            json.dumps({"canonical_evidence": [_canonical(f"ev_{paper_id}", paper_id=paper_id)]}),
+            encoding="utf-8",
+        )
+        (paper_dir / "experiment_map.json").write_text(
+            json.dumps({**_experiment_map(), "paper_id": paper_id}),
+            encoding="utf-8",
+        )
+    store = Store()
+
+    outputs = build_evidence_derivation_dir(tmp_path, build_id="build_1", store=store)
+
+    assert outputs == [tmp_path.resolve() / "builds/build_1/general_evidence_artifacts.json"]
+    assert store.artifacts is not None
+    assert store.artifacts["build_id"] == "build_1"

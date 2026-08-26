@@ -39,15 +39,5 @@ uv run pytest tests/test_cli_smoke.py -q
 
 ## Leer Más
 
-- [Contexto del sistema](000-SYSTEM-CONTEXT.md)
-- [Arquitectura](100-ARCHITECTURE.md)
-- [Contratos](300-CONTRACTS.md)
-- [Contrato de layout](contracts/local/data-layout.md)
-- [Contrato de handoffs](contracts/local/stage-handoffs.md)
-- [Contrato de schemas](contracts/local/artifact-schemas.md)
-- [Contrato de StructuredBlock](contracts/fundamental/scientific/structured-block.md)
-- [Contrato de ExperimentMap](contracts/fundamental/scientific/experiment-map.md)
-- [Contrato de CanonicalEvidence](contracts/fundamental/scientific/canonical-evidence.md)
-- [Operación](200-OPERATIONS.md)
-- [CLI local](operations/cli.md)
-- [Runbooks](operations/runbooks/)
+Para tener la imagen completa de el projecto de victus visitar:
+https://wiki.victus.fit/

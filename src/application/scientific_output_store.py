@@ -4,9 +4,6 @@ import hashlib
 import json
 from typing import Any, Protocol
 
-from src.workspace import runs
-
-
 class ScientificOutputStore(Protocol):
     def upsert_structured_paper(self, record: dict[str, Any]) -> None:
         ...
@@ -15,6 +12,9 @@ class ScientificOutputStore(Protocol):
         ...
 
     def fetch_structured_paper_ids(self, limit: int | None = None) -> list[str]:
+        ...
+
+    def has_canonical_evidence(self, paper_id: str) -> bool:
         ...
 
     def upsert_structured_blocks(self, record: dict[str, Any]) -> None:
@@ -27,6 +27,9 @@ class ScientificOutputStore(Protocol):
         ...
 
     def upsert_canonical_evidence(self, record: dict[str, Any]) -> None:
+        ...
+
+    def replace_evidence_derivation_build(self, artifacts: dict[str, Any]) -> None:
         ...
 
 
@@ -147,30 +150,20 @@ def stable_experiment_map_id(paper_id: str, experiment_map: dict[str, Any]) -> s
 def _deliver(
     store: ScientificOutputStore | None,
     record_type: str,
-    record_id: str,
+    _record_id: str,
     payload: dict[str, Any],
 ) -> None:
     if store is None:
         return
-    try:
-        if record_type == "structured_paper":
-            store.upsert_structured_paper(payload)
-        elif record_type == "structured_blocks":
-            store.upsert_structured_blocks(payload)
-        elif record_type == "paper_classification":
-            store.upsert_paper_classification(payload)
-        elif record_type == "experiment_map":
-            store.upsert_experiment_map(payload)
-        elif record_type == "canonical_evidence":
-            store.upsert_canonical_evidence(payload)
-        else:
-            raise ValueError(f"Unsupported scientific output record type: {record_type}")
-    except Exception as exc:
-        runs.append_postgres_outbox(
-            record_type=record_type,
-            record_id=record_id,
-            idempotency_key=record_id,
-            payload_ref=f"scientific_outputs#{record_id}",
-            payload=payload,
-            last_error=str(exc),
-        )
+    if record_type == "structured_paper":
+        store.upsert_structured_paper(payload)
+    elif record_type == "structured_blocks":
+        store.upsert_structured_blocks(payload)
+    elif record_type == "paper_classification":
+        store.upsert_paper_classification(payload)
+    elif record_type == "experiment_map":
+        store.upsert_experiment_map(payload)
+    elif record_type == "canonical_evidence":
+        store.upsert_canonical_evidence(payload)
+    else:
+        raise ValueError(f"Unsupported scientific output record type: {record_type}")

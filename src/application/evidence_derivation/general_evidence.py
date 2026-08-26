@@ -23,6 +23,7 @@ def build_general_evidence_artifacts(
     experiment_map: dict[str, Any],
     build_id: str | None = None,
 ) -> dict[str, Any]:
+    effective_build_id = build_id or stable_build_id(canonical_evidence, [experiment_map])
     exposure_registry = build_exposure_registry(canonical_evidence)
     outcome_registry = build_outcome_registry(canonical_evidence)
     projections = build_evidence_projections(
@@ -30,19 +31,69 @@ def build_general_evidence_artifacts(
         experiment_map=experiment_map,
         exposure_registry=exposure_registry,
         outcome_registry=outcome_registry,
-        build_id=build_id,
+        build_id=effective_build_id,
     )
     general_evidence = build_general_evidence(
         projections=[projection for projection in projections if projection["projection_status"] != "rejected"],
         exposure_registry=exposure_registry,
         outcome_registry=outcome_registry,
-        build_id=build_id,
+        build_id=effective_build_id,
     )
+    support = build_general_evidence_support(general_evidence)
     return {
+        "build_id": effective_build_id,
         "exposure_registry": exposure_registry,
         "outcome_registry": outcome_registry,
         "evidence_projections": projections,
         "general_evidence": general_evidence,
+        "general_evidence_support": support,
+        "rag_export": build_rag_export(general_evidence=general_evidence, evidence_projections=projections),
+    }
+
+
+def build_corpus_general_evidence_artifacts(
+    *,
+    papers: list[dict[str, Any]],
+    build_id: str | None = None,
+) -> dict[str, Any]:
+    canonical_evidence = [
+        item
+        for paper in papers
+        for item in paper.get("canonical_evidence") or []
+        if isinstance(item, dict)
+    ]
+    experiment_maps = [paper.get("experiment_map") for paper in papers if isinstance(paper.get("experiment_map"), dict)]
+    effective_build_id = build_id or stable_build_id(canonical_evidence, experiment_maps)
+    exposure_registry = build_exposure_registry(canonical_evidence)
+    outcome_registry = build_outcome_registry(canonical_evidence)
+    projections: list[dict[str, Any]] = []
+    for paper in papers:
+        items = paper.get("canonical_evidence") or []
+        experiment_map = paper.get("experiment_map") or {}
+        if not isinstance(items, list) or not isinstance(experiment_map, dict):
+            raise ValueError("Corpus papers require canonical_evidence list and experiment_map object")
+        projections.extend(
+            build_evidence_projections(
+                canonical_evidence=items,
+                experiment_map=experiment_map,
+                exposure_registry=exposure_registry,
+                outcome_registry=outcome_registry,
+                build_id=effective_build_id,
+            )
+        )
+    general_evidence = build_general_evidence(
+        projections=[projection for projection in projections if projection["projection_status"] != "rejected"],
+        exposure_registry=exposure_registry,
+        outcome_registry=outcome_registry,
+        build_id=effective_build_id,
+    )
+    return {
+        "build_id": effective_build_id,
+        "exposure_registry": exposure_registry,
+        "outcome_registry": outcome_registry,
+        "evidence_projections": projections,
+        "general_evidence": general_evidence,
+        "general_evidence_support": build_general_evidence_support(general_evidence),
         "rag_export": build_rag_export(general_evidence=general_evidence, evidence_projections=projections),
     }
 
@@ -125,6 +176,7 @@ def build_evidence_projections(
             projection.update(rank)
             projection["projection_id"] = _stable_id(
                 "projection",
+                build_id,
                 projection["canonical_evidence_id"],
                 projection["exposure_id"],
                 projection["outcome_id"],
@@ -218,7 +270,7 @@ def build_general_evidence(
         conclusion = _template_conclusion(question, dominant_direction, consensus_level, recommendation_use, causal_allowed)
         output.append(
             {
-                "general_evidence_id": _stable_id("general_evidence", *key),
+                "general_evidence_id": _stable_id("general_evidence", build_id, *key),
                 "build_id": build_id,
                 "exposure_id": exposure_id,
                 "outcome_id": outcome_id,
@@ -258,6 +310,26 @@ def build_general_evidence(
             }
         )
     return output
+
+
+def build_general_evidence_support(general_evidence: list[dict[str, Any]]) -> list[dict[str, str]]:
+    role_fields = {
+        "supporting": "supporting_projection_ids",
+        "null": "null_projection_ids",
+        "opposing": "opposing_projection_ids",
+        "mixed": "mixed_projection_ids",
+        "representative": "representative_projection_ids",
+    }
+    return [
+        {
+            "general_evidence_id": str(item["general_evidence_id"]),
+            "projection_id": str(projection_id),
+            "support_role": role,
+        }
+        for item in general_evidence
+        for role, field in role_fields.items()
+        for projection_id in item.get(field) or []
+    ]
 
 
 def build_rag_export(*, general_evidence: list[dict[str, Any]], evidence_projections: list[dict[str, Any]]) -> dict[str, Any]:
@@ -613,6 +685,18 @@ def _organism_from_design(study_design: Any) -> str:
 def _stable_id(prefix: str, *parts: Any) -> str:
     encoded = json.dumps(parts, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return f"{prefix}_{hashlib.sha256(encoded).hexdigest()}"
+
+
+def stable_build_id(
+    canonical_evidence: list[dict[str, Any]],
+    experiment_maps: list[dict[str, Any]] | None = None,
+) -> str:
+    evidence_payload = sorted(canonical_evidence, key=lambda item: str(item.get("canonical_evidence_id") or ""))
+    map_payload = sorted(
+        experiment_maps or [],
+        key=lambda item: str(item.get("paper_id") or item.get("experiment_map_id") or ""),
+    )
+    return _stable_id("evidence_build", evidence_payload, map_payload)
 
 
 def _now() -> str:

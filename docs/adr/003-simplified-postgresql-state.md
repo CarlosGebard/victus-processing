@@ -6,7 +6,7 @@ updated_at: 2026-06-19
 owners:
   - victus-processing
 related_docs:
-  - docs/postgres-schema.mermaid.md
+  - docs/contracts/postgres-schema.mermaid.md
   - docs/operations/runbooks/postgres-pipeline-records.md
 ---
 
@@ -53,5 +53,5 @@ default.
 
 ## Related Documents
 
-- [PostgreSQL schema](../postgres-schema.mermaid.md)
+- [PostgreSQL schema](../contracts/postgres-schema.mermaid.md)
 - [PostgreSQL runbook](../operations/runbooks/postgres-pipeline-records.md)

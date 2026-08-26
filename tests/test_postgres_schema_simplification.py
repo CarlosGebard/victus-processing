@@ -15,6 +15,17 @@ def test_reset_migration_preserves_structured_papers() -> None:
     assert "truncate structured_papers" not in sql
     assert "create table paper_pipeline_state" in sql
     assert "create table canonical_evidence" in sql
+    assert "create table evidence_projections" in sql
+    assert "create table general_evidence" in sql
+
+
+def test_incremental_evidence_derivation_migration_is_non_destructive() -> None:
+    sql = (ROOT / "ops/sql/006_evidence_derivation_outputs.sql").read_text(encoding="utf-8").lower()
+
+    assert "create table if not exists evidence_projections" in sql
+    assert "create table if not exists general_evidence" in sql
+    assert "create table if not exists general_evidence_support" in sql
+    assert "drop table" not in sql
 
 
 def test_processing_state_surfaces_latest_pipeline_failure(tmp_path: Path) -> None:

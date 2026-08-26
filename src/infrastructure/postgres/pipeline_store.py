@@ -21,6 +21,9 @@ class PipelineRecordStore(Protocol):
     def fetch_structured_paper_ids(self, limit: int | None = None) -> list[str]:
         ...
 
+    def has_canonical_evidence(self, paper_id: str) -> bool:
+        ...
+
     def upsert_structured_blocks(self, record: dict[str, Any]) -> None:
         ...
 
@@ -31,6 +34,9 @@ class PipelineRecordStore(Protocol):
         ...
 
     def upsert_canonical_evidence(self, record: dict[str, Any]) -> None:
+        ...
+
+    def replace_evidence_derivation_build(self, artifacts: dict[str, Any]) -> None:
         ...
 
     def upsert_paper_processing_state(self, record: dict[str, Any]) -> None:
@@ -157,6 +163,16 @@ class PostgresPipelineRecordStore:
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
         return [str(row[0]) for row in rows]
+
+    def has_canonical_evidence(self, paper_id: str) -> bool:
+        with psycopg.connect(self.conninfo) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM canonical_evidence WHERE paper_id = %s)",
+                    (paper_id,),
+                )
+                row = cursor.fetchone()
+        return bool(row and row[0])
 
     def upsert_structured_blocks(self, record: dict[str, Any]) -> None:
         blocks = record.get("blocks")
@@ -371,6 +387,32 @@ class PostgresPipelineRecordStore:
                         _canonical_evidence_params(record, item, index),
                     )
 
+    def replace_evidence_derivation_build(self, artifacts: dict[str, Any]) -> None:
+        build_id = _required_str(artifacts, "build_id")
+        exposures = _record_list(artifacts, "exposure_registry")
+        outcomes = _record_list(artifacts, "outcome_registry")
+        projections = _record_list(artifacts, "evidence_projections")
+        general = _record_list(artifacts, "general_evidence")
+        support = _record_list(artifacts, "general_evidence_support")
+        with psycopg.connect(self.conninfo) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM general_evidence WHERE build_id = %s", (build_id,))
+                cursor.execute("DELETE FROM evidence_projections WHERE build_id = %s", (build_id,))
+                cursor.executemany(_EXPOSURE_UPSERT_SQL, [_exposure_params(item) for item in exposures])
+                cursor.executemany(_OUTCOME_UPSERT_SQL, [_outcome_params(item) for item in outcomes])
+                cursor.executemany(
+                    _EVIDENCE_PROJECTION_INSERT_SQL,
+                    [_evidence_projection_params(build_id, item) for item in projections],
+                )
+                cursor.executemany(
+                    _GENERAL_EVIDENCE_INSERT_SQL,
+                    [_general_evidence_params(build_id, item) for item in general],
+                )
+                cursor.executemany(
+                    _GENERAL_EVIDENCE_SUPPORT_INSERT_SQL,
+                    [_general_evidence_support_params(item) for item in support],
+                )
+
     def upsert_paper_processing_state(self, record: dict[str, Any]) -> None:
         with psycopg.connect(self.conninfo) as connection:
             with connection.cursor() as cursor:
@@ -463,6 +505,87 @@ class PostgresPipelineRecordStore:
             }
         return facts
 
+
+_EXPOSURE_UPSERT_SQL = """
+INSERT INTO exposure_registry (
+  exposure_id, canonical_name, display_name, exposure_type, aliases,
+  parent_exposure_id, definition, status, created_by, confidence, payload, updated_at
+) VALUES (
+  %(exposure_id)s, %(canonical_name)s, %(display_name)s, %(exposure_type)s, %(aliases)s,
+  %(parent_exposure_id)s, %(definition)s, %(status)s, %(created_by)s, %(confidence)s, %(payload)s, now()
+)
+ON CONFLICT (exposure_id) DO UPDATE SET
+  canonical_name = EXCLUDED.canonical_name,
+  display_name = EXCLUDED.display_name,
+  exposure_type = EXCLUDED.exposure_type,
+  aliases = EXCLUDED.aliases,
+  parent_exposure_id = EXCLUDED.parent_exposure_id,
+  definition = EXCLUDED.definition,
+  status = EXCLUDED.status,
+  created_by = EXCLUDED.created_by,
+  confidence = EXCLUDED.confidence,
+  payload = EXCLUDED.payload,
+  updated_at = now()
+"""
+
+_OUTCOME_UPSERT_SQL = """
+INSERT INTO outcome_registry (
+  outcome_id, canonical_name, display_name, outcome_type, aliases,
+  parent_outcome_id, definition, status, created_by, confidence, payload, updated_at
+) VALUES (
+  %(outcome_id)s, %(canonical_name)s, %(display_name)s, %(outcome_type)s, %(aliases)s,
+  %(parent_outcome_id)s, %(definition)s, %(status)s, %(created_by)s, %(confidence)s, %(payload)s, now()
+)
+ON CONFLICT (outcome_id) DO UPDATE SET
+  canonical_name = EXCLUDED.canonical_name,
+  display_name = EXCLUDED.display_name,
+  outcome_type = EXCLUDED.outcome_type,
+  aliases = EXCLUDED.aliases,
+  parent_outcome_id = EXCLUDED.parent_outcome_id,
+  definition = EXCLUDED.definition,
+  status = EXCLUDED.status,
+  created_by = EXCLUDED.created_by,
+  confidence = EXCLUDED.confidence,
+  payload = EXCLUDED.payload,
+  updated_at = now()
+"""
+
+_EVIDENCE_PROJECTION_INSERT_SQL = """
+INSERT INTO evidence_projections (
+  projection_id, build_id, canonical_evidence_id, paper_id, study_id,
+  exposure_id, outcome_id, organism, population_scope, context_identity,
+  effect_direction, study_design, evidence_rank, aggregation_weight, rag_use,
+  causal_language_allowed, requires_caveat, rank_reason, projection_status,
+  payload, created_at, updated_at
+) VALUES (
+  %(projection_id)s, %(build_id)s, %(canonical_evidence_id)s, %(paper_id)s, %(study_id)s,
+  %(exposure_id)s, %(outcome_id)s, %(organism)s, %(population_scope)s, %(context_identity)s,
+  %(effect_direction)s, %(study_design)s, %(evidence_rank)s, %(aggregation_weight)s, %(rag_use)s,
+  %(causal_language_allowed)s, %(requires_caveat)s, %(rank_reason)s, %(projection_status)s,
+  %(payload)s, %(created_at)s, now()
+)
+"""
+
+_GENERAL_EVIDENCE_INSERT_SQL = """
+INSERT INTO general_evidence (
+  general_evidence_id, build_id, exposure_id, outcome_id, organism,
+  population_scope, context_identity, question, dominant_direction,
+  consensus_level, paper_count, study_count, evidence_count, recommendation_use,
+  causal_language_allowed, requires_caveat, conclusion_claim, conclusion_status,
+  status, payload, created_at, updated_at
+) VALUES (
+  %(general_evidence_id)s, %(build_id)s, %(exposure_id)s, %(outcome_id)s, %(organism)s,
+  %(population_scope)s, %(context_identity)s, %(question)s, %(dominant_direction)s,
+  %(consensus_level)s, %(paper_count)s, %(study_count)s, %(evidence_count)s, %(recommendation_use)s,
+  %(causal_language_allowed)s, %(requires_caveat)s, %(conclusion_claim)s, %(conclusion_status)s,
+  %(status)s, %(payload)s, %(created_at)s, now()
+)
+"""
+
+_GENERAL_EVIDENCE_SUPPORT_INSERT_SQL = """
+INSERT INTO general_evidence_support (general_evidence_id, projection_id, support_role)
+VALUES (%(general_evidence_id)s, %(projection_id)s, %(support_role)s)
+"""
 
 _PAPER_PROCESSING_STATE_UPSERT_SQL = """
 INSERT INTO paper_processing_state (
@@ -676,6 +799,109 @@ def _paper_processing_state_params(record: dict[str, Any]) -> dict[str, Any]:
         "has_canonical_evidence": bool(record.get("has_canonical_evidence")),
         "paper_family": record.get("paper_family"),
     }
+
+
+def _exposure_params(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "exposure_id": _required_str(record, "exposure_id"),
+        "canonical_name": _required_str(record, "canonical_name"),
+        "display_name": _required_str(record, "display_name"),
+        "exposure_type": _required_str(record, "exposure_type"),
+        "aliases": Jsonb(_json_array(record.get("aliases"), "aliases")),
+        "parent_exposure_id": record.get("parent_exposure_id"),
+        "definition": record.get("definition"),
+        "status": _required_str(record, "status"),
+        "created_by": _required_str(record, "created_by"),
+        "confidence": _required_str(record, "confidence"),
+        "payload": Jsonb(record),
+    }
+
+
+def _outcome_params(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "outcome_id": _required_str(record, "outcome_id"),
+        "canonical_name": _required_str(record, "canonical_name"),
+        "display_name": _required_str(record, "display_name"),
+        "outcome_type": _required_str(record, "outcome_type"),
+        "aliases": Jsonb(_json_array(record.get("aliases"), "aliases")),
+        "parent_outcome_id": record.get("parent_outcome_id"),
+        "definition": record.get("definition"),
+        "status": _required_str(record, "status"),
+        "created_by": _required_str(record, "created_by"),
+        "confidence": _required_str(record, "confidence"),
+        "payload": Jsonb(record),
+    }
+
+
+def _evidence_projection_params(build_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    if _required_str(record, "build_id") != build_id:
+        raise ValueError("EvidenceProjection build_id does not match artifact build_id")
+    return {
+        "projection_id": _required_str(record, "projection_id"),
+        "build_id": build_id,
+        "canonical_evidence_id": _required_str(record, "canonical_evidence_id"),
+        "paper_id": _required_str(record, "paper_id"),
+        "study_id": _required_str(record, "study_id"),
+        "exposure_id": record.get("exposure_id"),
+        "outcome_id": record.get("outcome_id"),
+        "organism": record.get("organism"),
+        "population_scope": record.get("population_scope"),
+        "context_identity": Jsonb(_json_object(record.get("context_identity"), "context_identity")),
+        "effect_direction": _required_str(record, "effect_direction"),
+        "study_design": _required_str(record, "study_design"),
+        "evidence_rank": _required_str(record, "evidence_rank"),
+        "aggregation_weight": float(record.get("aggregation_weight") or 0.0),
+        "rag_use": _required_str(record, "rag_use"),
+        "causal_language_allowed": bool(record.get("causal_language_allowed")),
+        "requires_caveat": bool(record.get("requires_caveat")),
+        "rank_reason": _required_str(record, "rank_reason"),
+        "projection_status": _required_str(record, "projection_status"),
+        "payload": Jsonb(record),
+        "created_at": _required_str(record, "created_at"),
+    }
+
+
+def _general_evidence_params(build_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    if _required_str(record, "build_id") != build_id:
+        raise ValueError("GeneralEvidence build_id does not match artifact build_id")
+    return {
+        "general_evidence_id": _required_str(record, "general_evidence_id"),
+        "build_id": build_id,
+        "exposure_id": record.get("exposure_id"),
+        "outcome_id": record.get("outcome_id"),
+        "organism": record.get("organism"),
+        "population_scope": record.get("population_scope"),
+        "context_identity": Jsonb(_json_object(record.get("context_identity"), "context_identity")),
+        "question": _required_str(record, "question"),
+        "dominant_direction": _required_str(record, "dominant_direction"),
+        "consensus_level": _required_str(record, "consensus_level"),
+        "paper_count": int(record.get("paper_count") or 0),
+        "study_count": int(record.get("study_count") or 0),
+        "evidence_count": int(record.get("evidence_count") or 0),
+        "recommendation_use": _required_str(record, "recommendation_use"),
+        "causal_language_allowed": bool(record.get("causal_language_allowed")),
+        "requires_caveat": bool(record.get("requires_caveat")),
+        "conclusion_claim": _required_str(record, "conclusion_claim"),
+        "conclusion_status": _required_str(record, "conclusion_status"),
+        "status": _required_str(record, "status"),
+        "payload": Jsonb(record),
+        "created_at": _required_str(record, "created_at"),
+    }
+
+
+def _general_evidence_support_params(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "general_evidence_id": _required_str(record, "general_evidence_id"),
+        "projection_id": _required_str(record, "projection_id"),
+        "support_role": _required_str(record, "support_role"),
+    }
+
+
+def _record_list(record: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    value = record.get(key)
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError(f"{key} must be a list of objects")
+    return value
 
 
 def _required(record: dict[str, Any], key: str) -> str:

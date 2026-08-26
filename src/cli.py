@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import random
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from src.application.pdf_processing.pipeline import (
     run_pdf_processing,
     run_pdf_processing_dir,
 )
-from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_db, run_pdf_evidence_dir
+from src.application.evidence_extraction.evidence import run_pdf_evidence, run_pdf_evidence_db
 from src.application.evidence_derivation.stage import build_evidence_derivation_dir, build_evidence_derivation_for_paper
 from src.application.testing_pipeline.artifacts import copy_testing_markdown, copy_testing_source_pdf, iter_testing_pdf_paths
 from src.infrastructure.llm.factory import build_llm_client
@@ -318,14 +319,43 @@ def cmd_pdf_processing_json_from_markdown(args: argparse.Namespace) -> None:
             raise SystemExit("ERROR: --limit must be >= 1.")
         markdown_paths = markdown_paths[: args.limit]
 
+    if args.workers < 1:
+        raise SystemExit("ERROR: --workers must be >= 1.")
+
     outputs = []
     output_dir = common_kwargs["output_dir"]
-    for markdown_path in markdown_paths:
-        oversized_error = _oversized_markdown_error(markdown_path, output_dir=output_dir)
-        if oversized_error is not None:
-            print(f"[SKIP OVERSIZED] {markdown_path.stem}: {oversized_error}")
-            continue
-        outputs.append(run_markdown_processing(markdown_path, **common_kwargs))
+
+    async def process_markdown_dir() -> None:
+        queue: asyncio.Queue[Path] = asyncio.Queue()
+        for markdown_path in markdown_paths:
+            queue.put_nowait(markdown_path)
+
+        async def worker() -> None:
+            while True:
+                try:
+                    markdown_path = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                try:
+                    oversized_error = await asyncio.to_thread(
+                        _oversized_markdown_error,
+                        markdown_path,
+                        output_dir=output_dir,
+                    )
+                    if oversized_error is not None:
+                        print(f"[SKIP OVERSIZED] {markdown_path.stem}: {oversized_error}", flush=True)
+                        continue
+                    output_path = await asyncio.to_thread(run_markdown_processing, markdown_path, **common_kwargs)
+                    outputs.append(output_path)
+                except Exception as exc:
+                    print(f"[FAIL] {markdown_path}: {type(exc).__name__}: {exc}", flush=True)
+                finally:
+                    queue.task_done()
+
+        if markdown_paths:
+            await asyncio.gather(*(worker() for _ in range(min(args.workers, len(markdown_paths)))))
+
+    asyncio.run(process_markdown_dir())
     print(f"[OK] Markdown JSON outputs: {len(outputs)}")
     for output_path in outputs:
         print(f"- {ctx.display_path(output_path)}")
@@ -366,8 +396,9 @@ def cmd_pdf_processing_markdown(args: argparse.Namespace) -> None:
 
 def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
     output_store = _pipeline_record_store()
+    if output_store is None:
+        raise SystemExit("ERROR: evidence-extraction requires VICTUS_PIPELINE_POSTGRES_ENABLED=true.")
     common_kwargs = {
-        "output_dir": _optional_resolved(args.output_dir),
         "model": args.model,
         "skip_existing": args.skip_existing,
         "llm_client": build_llm_client(),
@@ -375,32 +406,44 @@ def cmd_pdf_processing_evidence(args: argparse.Namespace) -> None:
         "prompt_label": ctx.PROMPT_LABEL,
         "output_store": output_store,
     }
-    if args.from_db:
-        if output_store is None:
-            raise SystemExit("ERROR: --from-db requires VICTUS_PIPELINE_POSTGRES_ENABLED=true.")
-        outputs = run_pdf_evidence_db(
-            store=output_store,
-            paper_id=args.paper_id,
-            limit=args.limit,
-            **{key: value for key, value in common_kwargs.items() if key != "output_store"},
-        )
-        print(f"[OK] Evidence outputs from DB: {len(outputs)}")
-        for output_path in outputs:
-            print(f"- {ctx.display_path(output_path)}")
-        return
-    if args.input.is_file():
-        output_path = run_pdf_evidence(_resolved(args.input), **common_kwargs)
-        print(f"[OK] Evidence output: {ctx.display_path(output_path)}")
-        return
-    outputs = run_pdf_evidence_dir(
-        _resolved(args.input),
-        pattern=args.pattern,
+    progress_counts = {"done": 0, "skip": 0}
+
+    def report_progress(event: str, details: dict[str, object]) -> None:
+        index = details.get("index", "?")
+        total = details.get("total", "?")
+        paper_id = details.get("paper_id", "unknown")
+        prefix = f"[{index}/{total}] {event.upper()} {paper_id}"
+        if event == "classified":
+            message = f"{prefix} family={details.get('paper_family')}"
+        elif event == "mapped":
+            message = f"{prefix} experiments={details.get('experiments')}"
+        elif event == "done":
+            progress_counts["done"] += 1
+            message = f"{prefix} evidence_rows={details.get('evidence_rows', 0)}"
+            if details.get("reason"):
+                message += f" reason={details['reason']}"
+        elif event == "skip":
+            progress_counts["skip"] += 1
+            message = f"{prefix} reason={details.get('reason')}"
+        elif event == "error":
+            message = f"{prefix} error={details.get('error')}"
+        else:
+            message = prefix
+        print(message, flush=True)
+
+    outputs = run_pdf_evidence_db(
+        store=output_store,
+        paper_id=args.paper_id,
         limit=args.limit,
-        **common_kwargs,
+        workers=args.workers,
+        progress=report_progress,
+        **{key: value for key, value in common_kwargs.items() if key != "output_store"},
     )
-    print(f"[OK] Evidence outputs: {len(outputs)}")
-    for output_path in outputs:
-        print(f"- {ctx.display_path(output_path)}")
+    print(
+        f"[OK] Evidence extraction finished: handled={len(outputs)} "
+        f"completed={progress_counts['done']} skipped={progress_counts['skip']}",
+        flush=True,
+    )
 
 
 def cmd_evidence_derivation_build(args: argparse.Namespace) -> None:
@@ -413,6 +456,7 @@ def cmd_evidence_derivation_build(args: argparse.Namespace) -> None:
         "prompt_label": ctx.PROMPT_LABEL,
         "model": args.model,
         "language": args.language,
+        "store": _pipeline_record_store(),
     }
     input_path = _resolved(args.input)
     if input_path.is_file():
@@ -449,7 +493,6 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
         paper_id = pdf_path.stem
         source_pdf = copy_testing_source_pdf(pdf_path, output_dir, overwrite=args.overwrite_source)
         print(f"[TESTING SOURCE] {paper_id}: {ctx.display_path(source_pdf)}")
-        paper_dir = output_dir / paper_id
         common_processing_kwargs = {
             "output_dir": output_dir,
             "prompt_first_batch": _optional_resolved(args.prompt_first_batch),
@@ -469,17 +512,14 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
                 overwrite=args.overwrite_markdown,
             )
             print(f"[TESTING MARKDOWN SOURCE] {paper_id}: {ctx.display_path(markdown_path)}")
-            final_output = run_markdown_processing(markdown_path, **common_processing_kwargs)
+            run_markdown_processing(markdown_path, **common_processing_kwargs)
         else:
-            final_output = run_pdf_processing(
+            run_pdf_processing(
                 pdf_path,
                 **common_processing_kwargs,
             )
-        processed_output = paper_dir / "paper.processed.json"
-        evidence_input = processed_output if processed_output.exists() else final_output
         evidence_output = run_pdf_evidence(
-            evidence_input,
-            output_dir=output_dir,
+            paper_id,
             model=args.evidence_model,
             skip_existing=args.skip_existing_evidence,
             llm_client=llm_client,
@@ -487,7 +527,7 @@ def cmd_pdf_processing_testing(args: argparse.Namespace) -> None:
             prompt_label=ctx.PROMPT_LABEL,
             output_store=_pipeline_record_store(),
         )
-        print(f"[TESTING DONE] {paper_id}: {ctx.display_path(evidence_output)}")
+        print(f"[TESTING DONE] {paper_id}: {evidence_output}")
 
 
 def cmd_data_layout_create(args: argparse.Namespace) -> None:
@@ -822,6 +862,12 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
         default=None,
         help="Cantidad maxima de batches Markdown a procesar",
     )
+    json_from_markdown_parser.add_argument(
+        "--workers",
+        type=int,
+        default=defaults.workers,
+        help=f"Markdown files a procesar en paralelo (default: {defaults.workers})",
+    )
     json_from_markdown_parser.set_defaults(handler=cmd_pdf_processing_json_from_markdown)
 
     markdown_parser = _add_parser(
@@ -879,7 +925,6 @@ def _add_pdf_processing_group(subparsers: argparse._SubParsersAction[argparse.Ar
     markdown_parser.set_defaults(handler=cmd_pdf_processing_markdown)
 
 def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    defaults = load_pdf_processing_config()
     evidence_parser = _add_parser(
         subparsers,
         "evidence-extraction",
@@ -892,46 +937,22 @@ def _add_evidence_extraction_group(subparsers: argparse._SubParsersAction[argpar
         help="Genera artifacts de evidencia desde paper.processed.json",
     )
     run_parser.add_argument(
-        "--input",
-        type=Path,
-        default=defaults.output_dir,
-        help=(
-            "Archivo paper.processed.json o directorio de artefactos PDF-processing "
-            f"(default: {ctx.display_path(defaults.output_dir)})"
-        ),
-    )
-    run_parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help=f"Directorio de evidencia (default: {ctx.display_path(ctx.EVIDENCE_OUTPUT_DIR)})",
-    )
-    run_parser.add_argument(
-        "--pattern",
-        default="*/paper.processed.json",
-        help='Patron glob cuando --input es directorio (default: "*/paper.processed.json")',
-    )
-    run_parser.add_argument(
         "--limit",
         type=int,
         default=None,
         help="Cantidad maxima de papers a procesar cuando --input es directorio",
     )
     run_parser.add_argument(
-        "--from-db",
-        action="store_true",
-        help="Consume structured_papers desde PostgreSQL en vez de paper.processed.json",
-    )
-    run_parser.add_argument(
         "--paper-id",
         default=None,
-        help="Paper puntual para --from-db",
+        help="Paper puntual de structured_papers; por defecto procesa todos",
     )
     run_parser.add_argument("--model", default=None, help="Modelo LLM alternativo para evidence")
+    run_parser.add_argument("--workers", type=int, default=1, help="Papers a procesar en paralelo (default: 1)")
     run_parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Salta papers con canonical_evidence.json existente",
+        help="Salta papers que ya tienen filas en canonical_evidence",
     )
     run_parser.set_defaults(handler=cmd_pdf_processing_evidence)
 

@@ -229,23 +229,45 @@ Use `between_group_result` for explicit comparisons between groups, arms, condit
 
 Use `within_group_change` for explicit change over time within the same group or condition.
 
-Use `association` or `correlation` only when the text reports association/correlation logic.
+Use `other` for association or correlation findings that do not match a more
+specific result pattern. Represent their scientific meaning with
+`assertion_type=association` or `assertion_type=no_association`.
 
 Use `dose_response` only when the result explicitly depends on dose, concentration, gradient, EC50, potency, or response curve.
 
 Use `time_course` only when the result explicitly depends on time progression or repeated timepoints.
 
-Use `null_result` for no difference, no effect, no change, or non-significant result relations.
+Null findings do not have a dedicated `evidence_type`. Preserve the observed
+result pattern: use `between_group_result` for a null group comparison,
+`within_group_change` for no within-group change, or `other` when neither
+pattern applies. Set `effect_direction=no_effect` and
+`assertion_type=no_association`.
 
 Use `specificity_or_selectivity_result` for effects present for one target, condition, receptor, compound, subgroup, or outcome but absent or weaker in another.
 
-Use `mechanistic_result` only for explicit mechanism, pathway, receptor, binding, molecular, physiological, or causal process evidence.
+Use `other` for mechanistic findings that do not match a more specific result
+pattern and set `assertion_type=mechanistic_link`.
 
 Do not label a simple treatment effect as mechanistic merely because it involves a biological variable.
 
-Use `descriptive_result` for explicit observed descriptive patterns without a clear intervention/comparator effect.
+Use `other` for explicit descriptive patterns without a clear
+intervention/comparator effect and set
+`assertion_type=descriptive_comparison`.
 
 Use `unclear` only when an explicit result exists but the type cannot be determined.
+
+Never place an `assertion_type` value such as `association`, `no_association`,
+`mechanistic_link`, or `descriptive_comparison` in `evidence_type`.
+
+`limitation` is never a valid `evidence_type`.
+
+When an evidence object captures an explicit limitation or caution tied to a
+result, set `evidence_role_in_paper=limitation`. Select `evidence_type` from the
+allowed evidence-type enum according to the underlying result pattern. Use
+`evidence_type=other` when no more specific evidence type applies.
+
+Never copy a value from `evidence_role_in_paper`, including `limitation`, into
+`evidence_type`.
 
 # EVIDENCE ROLE IN PAPER RULES
 
@@ -265,7 +287,9 @@ Use `descriptive_result` when the finding describes observed patterns, baseline 
 
 Use `adverse_event` when the finding reports harm, side effects, safety signals, worsening, tolerability issues, or adverse outcomes.
 
-Use `limitation` when the evidence object captures an explicit limitation or caution tied to a result.
+Use `limitation` only in `evidence_role_in_paper` when the evidence object
+captures an explicit limitation or caution tied to a result. Never use
+`limitation` as `evidence_type`.
 
 Use `method_detail` only when the extracted relation is explicitly about a method, assay, measurement, validation procedure, protocol outcome, or methodological result. Do not extract pure protocols as evidence.
 

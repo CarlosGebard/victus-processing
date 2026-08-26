@@ -32,10 +32,11 @@ paper state. Detailed events and artifact manifests remain local JSON records.
 
 ## Setup
 
-Apply the active schema migration:
+Apply the active schema migrations:
 
 ```bash
 psql "$DATABASE_URL" -f ops/sql/005_simplified_postgres_schema.sql
+psql "$DATABASE_URL" -f ops/sql/006_evidence_derivation_outputs.sql
 ```
 
 Migration 005 drops and recreates every pipeline table except
@@ -60,6 +61,9 @@ psql "$DATABASE_URL" -c '\d structured_blocks'
 psql "$DATABASE_URL" -c '\d paper_classifications'
 psql "$DATABASE_URL" -c '\d experiment_maps'
 psql "$DATABASE_URL" -c '\d canonical_evidence'
+psql "$DATABASE_URL" -c '\d evidence_projections'
+psql "$DATABASE_URL" -c '\d general_evidence'
+psql "$DATABASE_URL" -c '\d general_evidence_support'
 ```
 
 Run the maintained smoke validation:
